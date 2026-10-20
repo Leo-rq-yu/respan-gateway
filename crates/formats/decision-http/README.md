@@ -5,6 +5,11 @@
 | Format | Endpoint | Served by |
 | --- | --- | --- |
 | `typesafe-systemone` (`SystemOne`) | `POST /v1/systemone` | TypeSafe (`vendor = "typesafe"`), or any compatible base URL |
+| `decisions` (`Decisions`) | `POST /v1/decisions` | Any base URL that serves the Decisions API |
+
+Both carry the same body, so a request read by one is written by the other.
+`response_body` gives the JSON body either format answers a client with for a
+call's events, for a host that logs it.
 
 A request is `{"model", "state", "questions": {id: question}}`, each question
 `{"type", "instructions", "criteria"}`: `noul` with criteria

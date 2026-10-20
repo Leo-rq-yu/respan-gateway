@@ -11,7 +11,7 @@ use respan_gateway_conversation_http::openai::OpenAiChat;
 use respan_gateway_conversation_http::responses::OpenAiResponses;
 use respan_gateway_core::{Fault, Format, Gateway};
 use respan_gateway_decision as decision;
-use respan_gateway_decision_http::SystemOne;
+use respan_gateway_decision_http::{Decisions, SystemOne};
 use respan_gateway_http::{ClientIo, ProviderIo, raw::Original};
 use respan_gateway_media::{embedding, image, speech, transcription, video};
 use respan_gateway_media_http::gemini::GeminiVeo;
@@ -177,6 +177,7 @@ mod endpoints {
     pub const SPEECH: &[&str] = &["POST /v1/audio/speech"];
     pub const EMBEDDINGS: &[&str] = &["POST /v1/embeddings"];
     pub const SYSTEMONE: &[&str] = &["POST /v1/systemone"];
+    pub const DECISIONS: &[&str] = &["POST /v1/decisions"];
     pub const VIDEOS: &[&str] = &[
         "POST /v1/videos",
         "GET /v1/videos",
@@ -229,6 +230,10 @@ pub fn formats() -> Vec<KnownFormat> {
             .job_ids("veo_")
             .model(Model::of(video::Input::model, video::Input::set_model)),
         KnownFormat::of(kind::DECISION, endpoints::SYSTEMONE, SystemOne).model(Model::of(
+            decision::Input::model,
+            decision::Input::set_model,
+        )),
+        KnownFormat::of(kind::DECISION, endpoints::DECISIONS, Decisions).model(Model::of(
             decision::Input::model,
             decision::Input::set_model,
         )),

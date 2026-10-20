@@ -6,7 +6,7 @@ use respan_gateway_conversation_http::anthropic::AnthropicMessages;
 use respan_gateway_conversation_http::gemini::GeminiGenerate;
 use respan_gateway_conversation_http::openai::OpenAiChat;
 use respan_gateway_conversation_http::responses::OpenAiResponses;
-use respan_gateway_decision_http::SystemOne;
+use respan_gateway_decision_http::{Decisions, SystemOne};
 use respan_gateway_media_http::gemini::GeminiVeo;
 use respan_gateway_media_http::openai::{
     OpenAiEmbeddings, OpenAiImages, OpenAiSpeech, OpenAiTranscriptions, OpenAiVideos,
@@ -33,6 +33,7 @@ pub const FORMATS: &[&dyn Upstream] = &[
     &OpenAiVideos,
     &GeminiVeo,
     &SystemOne,
+    &Decisions,
     &Passthrough,
 ];
 
