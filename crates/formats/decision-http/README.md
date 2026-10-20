@@ -4,11 +4,11 @@
 
 | Format | Endpoint | Served by |
 | --- | --- | --- |
-| `typesafe-systemone` (`SystemOne`) | `POST /v1/systemone` | TypeSafe (`vendor = "typesafe"`), or any compatible base URL |
-| `decisions` (`Decisions`) | `POST /v1/decisions` | Any base URL that serves the Decisions API |
+| `decisions` (`Decisions`) | `POST /v1/decisions`, `POST /v1/systemone` | Any compatible base URL; TypeSafe (`vendor = "typesafe"`) at `/systemone` |
 
-Both carry the same body, so a request read by one is written by the other.
-`response_body` gives the JSON body either format answers a client with for a
+A provider is called at `/decisions` (`Decisions::SPEC`); a vendor that serves
+the contract at another path says so with `Decisions::at`, as TypeSafe does.
+`response_body` gives the JSON body a client is answered with for a
 call's events, for a host that logs it.
 
 A request is `{"model", "state", "questions": {id: question}}`, each question

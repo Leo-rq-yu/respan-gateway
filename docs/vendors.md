@@ -28,7 +28,7 @@ Each vendor is in one of two tiers:
 | <picture><source media="(prefers-color-scheme: dark)" srcset="assets/vendors/anthropic-dark.svg"><img src="assets/vendors/anthropic.svg" width="20" height="20" alt=""></picture> | Anthropic | `anthropic` | `ANTHROPIC_API_KEY` | `anthropic-messages` |
 | <img src="assets/vendors/gemini.svg" width="20" height="20" alt=""> | Gemini | `gemini` | `GEMINI_API_KEY` or `GOOGLE_API_KEY` | `gemini-generate`, `openai-chat`, `gemini-live`, `openai-images`, `gemini-veo`, `openai-embeddings` |
 | <picture><source media="(prefers-color-scheme: dark)" srcset="assets/vendors/respan-dark.svg"><img src="assets/vendors/respan.svg" width="20" height="20" alt=""></picture> | Respan | `respan` | `RESPAN_API_KEY` | `openai-chat`, `openai-responses`, `anthropic-messages`, `gemini-generate` |
-| <img src="assets/vendors/typesafe.png" width="20" height="20" alt=""> | TypeSafe | `typesafe` | `TYPESAFE_API_KEY` | `typesafe-systemone` |
+| <img src="assets/vendors/typesafe.png" width="20" height="20" alt=""> | TypeSafe | `typesafe` | `TYPESAFE_API_KEY` | `decisions` |
 
 ## 🟡 Yellow
 
