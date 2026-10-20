@@ -32,7 +32,7 @@ pub use speech::OpenAiSpeech;
 pub use transcriptions::OpenAiTranscriptions;
 pub use videos::OpenAiVideos;
 
-use crate::edge::sends;
+use crate::edge::{bind_provider, sends};
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD;
 use respan_gateway_conversation::{Media, MediaSource, Usage};
