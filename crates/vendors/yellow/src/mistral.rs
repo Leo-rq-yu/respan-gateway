@@ -36,7 +36,8 @@ pub const VENDOR: Vendor = Vendor {
 /// decoded into one [`Output::Audio`], and it refuses (422) `instructions`,
 /// `speed` and `stream_format`, so a request with `instructions` or `speed`
 /// fails `bad_request` before it is sent, and a stream is not asked of it.
-/// Its `pcm` is 32-bit float at 24 kHz, not OpenAI's 16-bit.
+/// Its voice is `voice_id`, and its `pcm` is 32-bit float at 24 kHz, not
+/// OpenAI's 16-bit.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct MistralSpeech;
 
@@ -92,7 +93,7 @@ fn post(head: &mut http::request::Parts, input: &Input) -> Result<Box<dyn Encode
     }
     v.insert("input".into(), input.text.clone().into());
     if let Some(voice) = &input.voice {
-        v.insert("voice".into(), voice.clone().into());
+        v.insert("voice_id".into(), voice.clone().into());
     }
     if let Some(format) = &input.audio_format {
         v.insert("response_format".into(), format.clone().into());
