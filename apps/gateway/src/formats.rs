@@ -14,6 +14,7 @@ use respan_gateway_decision as decision;
 use respan_gateway_decision_http::SystemOne;
 use respan_gateway_http::{ClientIo, ProviderIo, raw::Original};
 use respan_gateway_media::{embedding, image, speech, transcription, video};
+use respan_gateway_media_http::bedrock::BedrockEmbeddings;
 use respan_gateway_media_http::gemini::GeminiVeo;
 use respan_gateway_media_http::openai::{
     OpenAiEmbeddings, OpenAiImages, OpenAiSpeech, OpenAiTranscriptions, OpenAiVideos,
@@ -96,7 +97,7 @@ impl KnownFormat {
         O: Clone + Send + Sync + 'static,
     {
         let client = format.clone();
-        let mut known = Self::provider_only(kind, &format);
+        let mut known = Self::provider_only::<F, ProviderIo, I, O>(kind, &format);
         known.endpoints = endpoints.iter().map(|e| (*e).to_owned()).collect();
         known.serve = Some(Box::new(move |gateway| {
             gateway.client::<I, O, _>(client.clone())
@@ -104,10 +105,10 @@ impl KnownFormat {
         known
     }
 
-    /// `format` of `kind`, which only providers speak.
-    pub fn provider_only<F, I, O>(kind: &'static str, format: &F) -> Self
+    /// `format` of `kind`, which only providers speak, over any transport.
+    pub fn provider_only<F, T, I, O>(kind: &'static str, format: &F) -> Self
     where
-        F: Format<ProviderIo, O, I>,
+        F: Format<T, O, I>,
     {
         Self {
             name: format.name().to_owned(),
@@ -228,6 +229,7 @@ pub fn formats() -> Vec<KnownFormat> {
         KnownFormat::of(kind::VIDEO, endpoints::VEO, GeminiVeo)
             .job_ids("veo_")
             .model(Model::of(video::Input::model, video::Input::set_model)),
+        KnownFormat::provider_only(kind::EMBEDDING, &BedrockEmbeddings),
         KnownFormat::of(kind::DECISION, endpoints::SYSTEMONE, SystemOne).model(Model::of(
             decision::Input::model,
             decision::Input::set_model,

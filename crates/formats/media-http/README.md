@@ -97,3 +97,27 @@ at `https://generativelanguage.googleapis.com/v1beta` with the key in
   operation's `error`, or, filtered, a response of
   `raiMediaFilteredReasons`; a refusal is Google's `{"error": {code,
   message, status}}`. Veo reports no progress: an operation is done or not.
+
+`bedrock::BedrockEmbeddings`, named `bedrock-embeddings`: Amazon Bedrock's
+InvokeModel for embeddings, a provider of the embedding kind, at its
+region's runtime, `https://bedrock-runtime.{region}.amazonaws.com`, its key
+a Bedrock API key as a bearer token.
+
+- A call is `POST /model/{model}/invoke`, the model escaped in the path; an
+  inference profile's id (`us.cohere.embed-v4:0`) is its model as it is.
+- Cohere Embed (`cohere.embed-*`) embeds every text in one call:
+  `{texts, input_type, embedding_types: ["float"]}`, `input_type` the
+  client's (an `openai-embeddings` field) or `search_document`; its v4 takes
+  `dimensions` as `output_dimension`.
+- Titan Embeddings (`amazon.titan-embed-text-*`,
+  `amazon.titan-embed-image-v1`) embeds one text per call, so a request of
+  several texts is as many calls, a few at a time, one attempt of the
+  provider's: its vectors are the texts' in order, its usage theirs
+  together. Text v2 takes `dimensions` as it is, the multimodal model as
+  `embeddingConfig.outputEmbeddingLength`.
+- Vectors are asked for as floats; the client's `encoding_format` is the
+  client edge's. Usage is the input tokens Bedrock counts: Titan's
+  `inputTextTokenCount`, else the `x-amzn-bedrock-input-token-count`
+  header, Cohere's only count.
+- Texts alone: token ids, parts, a `dimensions` the model does not take and
+  fields of another format are refused, 400, before any call.

@@ -46,6 +46,7 @@ Each vendor is in one of two tiers:
 | <img src="assets/vendors/vllm.svg" width="20" height="20" alt=""> | vLLM | `vllm` | none | `openai-chat` |
 | <img src="assets/vendors/cloudflare.svg" width="20" height="20" alt=""> | Cloudflare | `cloudflare` | `CLOUDFLARE_API_TOKEN` | `openai-chat`, `openai-embeddings` |
 | <img src="assets/vendors/cerebras.svg" width="20" height="20" alt=""> | Cerebras | `cerebras` | `CEREBRAS_API_KEY` | `openai-chat` |
+| <img src="assets/vendors/bedrock.svg" width="20" height="20" alt=""> | Amazon Bedrock | `bedrock` | `AWS_BEARER_TOKEN_BEDROCK` | `bedrock-embeddings` |
 
 These tables are kept by hand: a vendor added to `ALL` in
 [`crates/vendors`](../crates/vendors/README.md), or a format added to a
@@ -65,7 +66,10 @@ formats (`openai-images`, `openai-transcriptions`, `openai-speech`,
 base URL as `openai-chat`. Gemini's own formats, `gemini-generate`
 (`generateContent` and `streamGenerateContent`, the model in the path) and
 `gemini-veo`, take `https://generativelanguage.googleapis.com/v1beta` with
-the key in `x-goog-api-key`. Session formats take a `wss://` URL as their
+the key in `x-goog-api-key`. Bedrock's `bedrock-embeddings` (InvokeModel, the model
+in the path) takes its region's runtime,
+`https://bedrock-runtime.{region}.amazonaws.com`, with a Bedrock API key as
+a bearer token. Session formats take a `wss://` URL as their
 SDK does: `wss://api.openai.com/v1` for `openai-realtime` and
 `responses-ws`, `wss://generativelanguage.googleapis.com` for `gemini-live`.
 
@@ -80,7 +84,8 @@ sent no key; a provider at another base URL lists at
 Without a config file, `RESPAN_<VENDOR>_BASE_URL` moves a vendor's base URL
 (`OLLAMA_HOST` for `ollama`); with one, only the file's `base_url` counts
 (`respan-gateway init` writes the moved URL into it). `azure` and `vllm`
-need a `base_url`; `cloudflare` needs `CLOUDFLARE_ACCOUNT_ID`, or one.
+need a `base_url`; `cloudflare` needs `CLOUDFLARE_ACCOUNT_ID`, or one;
+`bedrock` needs `AWS_REGION`, or one.
 
 How each vendor's quirks are handled, and how to add one, is in
 [`crates/vendors`](../crates/vendors/README.md).
