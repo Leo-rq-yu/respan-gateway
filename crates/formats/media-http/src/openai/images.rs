@@ -4,11 +4,12 @@
 
 use super::multipart::{self, Writer};
 use super::{
-    Fields, Form, as_usage_extras, b64, bind_client, bind_provider, bytes_of, event_json,
-    file_name, foreign, invalid, is_true, json_bytes, kept, merge_missing, mime_of, missing,
-    native_of, post_to, read_usage, rest_of, sends, set, sse_event, streams, take_count,
-    take_string, unb64, unix_now, unreadable, usage_extras, whole_json, write_field, write_usage,
+    Fields, Form, as_usage_extras, b64, bind_client, bytes_of, event_json, file_name, foreign,
+    invalid, is_true, json_bytes, kept, merge_missing, mime_of, missing, native_of, post_to,
+    read_usage, rest_of, sends, set, sse_event, streams, take_count, take_string, unb64, unix_now,
+    unreadable, usage_extras, whole_json, write_field, write_usage,
 };
+use crate::dialect::{self, Spec};
 use respan_gateway_conversation::{Media, MediaSource, Usage};
 use respan_gateway_core::Provider;
 use respan_gateway_core::{Connection, Fault, Format, NativeFields, NativeValue};
@@ -84,13 +85,35 @@ impl Format<ProviderIo, Output, Input> for OpenAiImages {
     }
 
     fn bind(&self, io: ProviderIo) -> Result<Connection<Output, Input>, Fault> {
-        let stream = streams(&io, &[GENERATIONS, EDITS], |f| is_true(f.get("stream")));
-        Ok(bind_provider(
-            io,
-            NAME,
-            move |head, input| post(head, input, stream),
-            |head, _| read_response(head),
-        ))
+        Ok(dialect::bind(*self, io))
+    }
+}
+
+/// Its spec's parts, which a vendor's dialect runs around.
+impl Spec for OpenAiImages {
+    type Input = Input;
+    type Output = Output;
+    const NAME: &'static str = NAME;
+
+    fn streams(&self, io: &ProviderIo) -> bool {
+        streams(io, &[GENERATIONS, EDITS], |f| is_true(f.get("stream")))
+    }
+
+    fn post(
+        &self,
+        head: &mut RequestHead,
+        input: &Input,
+        stream: bool,
+    ) -> Result<Box<dyn Encoder<Input>>, Fault> {
+        post(head, input, stream)
+    }
+
+    fn read_response(
+        &self,
+        head: &http::response::Parts,
+        _: &http::Request<Bytes>,
+    ) -> Option<Box<dyn Decoder<Output>>> {
+        read_response(head)
     }
 }
 

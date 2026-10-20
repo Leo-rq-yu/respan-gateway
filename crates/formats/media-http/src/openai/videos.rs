@@ -9,7 +9,8 @@ use super::{
     merge_missing, missing, native_of, rest_of, sends, set, take_count, take_string, unreadable,
     whole_json, write_field,
 };
-use crate::edge::{bind_provider, content};
+use crate::dialect::{self, Spec};
+use crate::edge::content;
 use respan_gateway_core::Provider;
 use respan_gateway_core::{Connection, ErrorCode, Fault, Format};
 use respan_gateway_http::bytes::Bytes;
@@ -76,9 +77,31 @@ impl Format<ProviderIo, Output, Input> for OpenAiVideos {
     }
 
     fn bind(&self, io: ProviderIo) -> Result<Connection<Output, Input>, Fault> {
-        Ok(bind_provider(io, NAME, call, |_, sent| {
-            Some(read_response(sent))
-        }))
+        Ok(dialect::bind(*self, io))
+    }
+}
+
+/// Its spec's parts, which a vendor's dialect runs around.
+impl Spec for OpenAiVideos {
+    type Input = Input;
+    type Output = Output;
+    const NAME: &'static str = NAME;
+
+    fn post(
+        &self,
+        head: &mut RequestHead,
+        input: &Input,
+        _: bool,
+    ) -> Result<Box<dyn Encoder<Input>>, Fault> {
+        call(head, input)
+    }
+
+    fn read_response(
+        &self,
+        _: &http::response::Parts,
+        sent: &http::Request<Bytes>,
+    ) -> Option<Box<dyn Decoder<Output>>> {
+        Some(read_response(sent))
     }
 }
 
