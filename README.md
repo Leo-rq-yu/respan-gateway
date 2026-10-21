@@ -124,8 +124,8 @@ on a public address.
 
 **Vendors:** OpenAI, Anthropic, Gemini, Respan, TypeSafe, Groq, DeepSeek,
 OpenRouter, xAI, Mistral, Together, Fireworks, Ollama, Azure, vLLM,
-Cloudflare and Cerebras, plus any compatible endpoint; see [Vendors](docs/vendors.md)
-for their tiers, keys and formats. Translation details are in each
+Cloudflare, Cerebras and Vertex AI, plus any compatible endpoint; see
+[Vendors](docs/vendors.md) for their tiers, keys and formats. Translation details are in each
 format's README, for [chat](crates/formats/conversation-http/README.md),
 [media](crates/formats/media-http/README.md) and
 [realtime](crates/formats/realtime-ws/README.md).

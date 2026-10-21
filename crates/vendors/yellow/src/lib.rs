@@ -12,6 +12,7 @@ pub mod mistral;
 pub mod ollama;
 pub mod openrouter;
 pub mod together;
+pub mod vertex;
 pub mod vllm;
 pub mod xai;
 
@@ -31,4 +32,5 @@ pub const ALL: &[&Vendor] = &[
     &vllm::VENDOR,
     &cloudflare::VENDOR,
     &cerebras::VENDOR,
+    &vertex::VENDOR,
 ];

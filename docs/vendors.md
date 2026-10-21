@@ -46,6 +46,7 @@ Each vendor is in one of two tiers:
 | <img src="assets/vendors/vllm.svg" width="20" height="20" alt=""> | vLLM | `vllm` | none | `openai-chat` |
 | <img src="assets/vendors/cloudflare.svg" width="20" height="20" alt=""> | Cloudflare | `cloudflare` | `CLOUDFLARE_API_TOKEN` | `openai-chat`, `openai-embeddings` |
 | <img src="assets/vendors/cerebras.svg" width="20" height="20" alt=""> | Cerebras | `cerebras` | `CEREBRAS_API_KEY` | `openai-chat` |
+| <img src="assets/vendors/gemini.svg" width="20" height="20" alt=""> | Google Vertex AI | `vertex` | `GOOGLE_VERTEX_ACCESS_TOKEN` or `CLOUDSDK_AUTH_ACCESS_TOKEN` | `gemini-generate`, `openai-chat` |
 
 These tables are kept by hand: a vendor added to `ALL` in
 [`crates/vendors`](../crates/vendors/README.md), or a format added to a
@@ -69,6 +70,15 @@ the key in `x-goog-api-key`. Session formats take a `wss://` URL as their
 SDK does: `wss://api.openai.com/v1` for `openai-realtime` and
 `responses-ws`, `wss://generativelanguage.googleapis.com` for `gemini-live`.
 
+Vertex AI's formats are under a project and location: `gemini-generate` at
+`https://{location}-aiplatform.googleapis.com/v1/projects/{project}/locations/{location}/publishers/google`
+and `openai-chat` at the same up to `/endpoints/openapi` (models named
+`google/gemini-2.5-flash`), both with a Google access token as the bearer
+key. The `global` location has no region in its host
+(`https://aiplatform.googleapis.com/v1/projects/..`), so give it as the
+`base_url`. Express mode's API keys are not taken: the key is sent only as a
+bearer token.
+
 Respan's formats sit under one API, `https://api.respan.ai/api`:
 `openai-chat` and `openai-responses` at it, `anthropic-messages` at
 `/anthropic`, `gemini-generate` at `/google/gemini/v1beta` (its key in
@@ -80,7 +90,8 @@ sent no key; a provider at another base URL lists at
 Without a config file, `RESPAN_<VENDOR>_BASE_URL` moves a vendor's base URL
 (`OLLAMA_HOST` for `ollama`); with one, only the file's `base_url` counts
 (`respan-gateway init` writes the moved URL into it). `azure` and `vllm`
-need a `base_url`; `cloudflare` needs `CLOUDFLARE_ACCOUNT_ID`, or one.
+need a `base_url`; `cloudflare` needs `CLOUDFLARE_ACCOUNT_ID`, or one;
+`vertex` needs `GOOGLE_CLOUD_PROJECT` and `GOOGLE_CLOUD_LOCATION`, or one.
 
 How each vendor's quirks are handled, and how to add one, is in
 [`crates/vendors`](../crates/vendors/README.md).
