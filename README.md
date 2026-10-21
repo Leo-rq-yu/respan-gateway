@@ -118,7 +118,7 @@ on a public address.
 | Kind | Formats |
 |---|---|
 | chat | `openai-chat`, `openai-responses`, `anthropic-messages`, `gemini-generate`; `passthrough` for a vendor's other endpoints |
-| realtime | `openai-realtime` ⇄ `gemini-live`; `responses-ws` relayed |
+| realtime | `openai-realtime` ⇄ `gemini-live`; `responses-ws` relayed; `openai-realtime` transcription sessions → `mistral-realtime` |
 | image, speech, transcription, embedding | OpenAI's endpoints |
 | video | `openai-videos`, `gemini-veo` |
 

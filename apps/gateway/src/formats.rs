@@ -22,7 +22,7 @@ use respan_gateway_passthrough_http::Passthrough;
 use respan_gateway_plugin_routing::Model;
 use respan_gateway_realtime as realtime;
 use respan_gateway_realtime_ws::{
-    GeminiLive, OpenAiRealtime, ResponsesWs, SessionModel, requested_model,
+    GeminiLive, MistralRealtime, OpenAiRealtime, ResponsesWs, SessionModel, requested_model,
 };
 
 /// The kinds of traffic this binary carries, as the admin API and routing
@@ -225,6 +225,7 @@ pub fn formats() -> Vec<KnownFormat> {
         KnownFormat::of(kind::CHAT, endpoints::MESSAGES, AnthropicMessages).model(chat()),
         KnownFormat::of(kind::CHAT, endpoints::GENERATE_CONTENT, GeminiGenerate).model(chat()),
         session(kind::REALTIME, GeminiLive, GeminiLive::PATH, true).model(realtime()),
+        KnownFormat::provider_only(kind::REALTIME, &MistralRealtime).websocket(),
         KnownFormat::of(kind::VIDEO, endpoints::VEO, GeminiVeo)
             .job_ids("veo_")
             .model(Model::of(video::Input::model, video::Input::set_model)),

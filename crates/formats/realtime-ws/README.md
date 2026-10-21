@@ -11,18 +11,22 @@ a format per spec:
   `/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent`
   after `wss://generativelanguage.googleapis.com`. Its server sends JSON in
   binary frames, which its transport takes as text.
+- `MistralRealtime`, `mistral-realtime`: Mistral's realtime transcription, at
+  `/audio/transcriptions/realtime` after `wss://api.mistral.ai/v1`. Providers
+  alone speak it: no client is served in it.
 - `ResponsesWs`, `responses-ws`: OpenAI's Responses over WebSocket, at
   `/responses` after `wss://api.openai.com/v1`. It is not realtime: it
   streams Responses over a socket, and uses the kind's types only as native
   events.
 
-Each is served at a path ending in its own, and sends to it;
-`format.transport(base_url)` is a `WsTransport` to its provider, set as its
-frames need. The key is the transport's (`with_headers`: OpenAI's
-`Authorization: Bearer`, Gemini's `x-goog-api-key`) or the client's. A
-format that speaks a subprotocol offers it to the provider beside the
-client's own offers, and gives it back to a client that offered it. They
-share their session's handshake, and differ in their spec and their codec.
+Each but `MistralRealtime` is served at a path ending in its own, and all
+send to it; `format.transport(base_url)` is a `WsTransport` to its provider,
+set as its frames need. The key is the transport's (`with_headers`: OpenAI's
+and Mistral's `Authorization: Bearer`, Gemini's `x-goog-api-key`) or the
+client's. A format that speaks a subprotocol offers it to the provider
+beside the client's own offers, and gives it back to a client that offered
+it. They share their session's handshake, and differ in their spec and
+their codec.
 
 `OpenAiRealtime` decodes each frame into the kind's events: a session's
 configuration, audio (its bytes, in the session's format), messages, tools'
@@ -95,6 +99,26 @@ What one spec has and the other has not is emulated, dropped or refused:
   Gemini client, which knows a refusal only as a close: 1007 if its cause
   is `Invalid`, and none if `NothingToCancel`.
 
+`MistralRealtime` transcribes and says nothing else, so it is the provider of
+an OpenAI Realtime transcription session. It decodes `session.created` and
+`session.updated` (the model and the audio format, PCM 16-bit or G.711),
+`transcription.text.delta` as an input transcript's delta,
+`transcription.done` as its whole text with the session's usage (prompt tokens
+as audio input tokens, completion tokens as output), and `error`. Its
+`transcription.language` and `transcription.segment` stay native, so an
+OpenAI client is not told of them. It writes a session's audio format
+(`session.update`), the user's audio in appends of at most 256 KiB
+(`input_audio.append`, converted to the session's format, 16 kHz until a
+session says another), a commit as `input_audio.flush`, and, when the
+client's events end, `input_audio.end`, which makes it send the whole
+transcript. Turn settings (server VAD or manual), ids and transcription
+settings are dropped, as the text is the same; a message, a tool's answer, a
+response to make or cancel, instructions, a voice, tools, an output modality
+and a change of model are refused. Its model is taken at connect, as
+OpenAI's is.
+Its own `target_streaming_delay_ms` is a native field of a session
+(`session.target_streaming_delay_ms`) that a plugin sets.
+
 A refused input is `bad_request`, closing the client 1008; a refused
 output `upstream`. Another format's events and fields a provider sends are
 dropped at the client, but an event its format says tells of what the model
@@ -111,8 +135,8 @@ cause as any format reads it (`Cause`: `Invalid`, `NothingToCancel`,
 A session's first input arrives only once it is routed, so routing reads
 its model from the handshake: `requested_model(&Original)` is `?model=`,
 OpenAI's and, by the gateway's convention, a Gemini client's. The model
-routing chose goes in the call as `SessionModel`, which OpenAI's provider
-dials (else the client's `?model=`; with neither the session is refused),
+routing chose goes in the call as `SessionModel`, which OpenAI's and
+Mistral's providers dial (else the client's `?model=`; with neither the session is refused),
 and into the opening `Session` by `realtime::set_model`, which Gemini's
 setup names. Each provider writes its own query, never the client's.
 
