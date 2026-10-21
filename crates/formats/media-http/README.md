@@ -60,6 +60,28 @@ streams, where its key goes), and `Dialected::new(spec, dialect)` is a
 provider format of the spec's name, so a client of the spec is still
 relayed to it.
 
+`empiriolabs::EmpirioLabsVideos`, named `empiriolabs-videos`: EmpirioLabs' video
+API, to providers only, at `https://api.empiriolabs.ai/v1` with a bearer key.
+
+- A `Create` is `POST /videos/generations`: its `seconds` `duration`, its
+  `size` (`WxH`, else 400) an `aspect_ratio` in lowest terms and a
+  `resolution` (its short side, such as `720p`), its reference image
+  `image` (a URL, or a data URL of its bytes), and its `empiriolabs-videos`
+  native fields as they are, a field the kind has a place for winning.
+- A job is polled at `GET /jobs/{id}`, an endpoint EmpirioLabs shares with
+  its other asynchronous kinds; its id is `empiriolabs_` and the provider's,
+  as a path segment holds it; another id is not found, 404. `processing` is
+  `in_progress`; `completed` with a video is `completed`, its videos' URLs
+  in `Job::videos`; `failed`, `cancelled` and `completed` with no video are
+  `failed`, with the provider's `error` code and message.
+- Content is refused, 400 `unsupported`, before any call: a video is at the
+  URL its job names, on the provider's storage, which this format's calls,
+  all beside the base URL, do not reach and the key must not.
+- EmpirioLabs cannot remix, delete or list videos, nor make a thumbnail or
+  spritesheet: those are refused, 400 `unsupported`, before any call.
+- What EmpirioLabs answers beyond the kind is dropped rather than kept
+  native.
+
 `gemini::GeminiVeo`, named `gemini-veo`: Google's Veo as the Gemini API serves it, to clients and providers,
 at `https://generativelanguage.googleapis.com/v1beta` with the key in
 `x-goog-api-key`.

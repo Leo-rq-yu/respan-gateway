@@ -373,7 +373,7 @@ fn a_bad_provider_is_an_error() {
         ("p = {  }", "provider 'p': needs a `vendor` or `formats`"),
         (
             "p = { vendor = \"nope\" }",
-            "provider 'p': unknown vendor 'nope'; vendors: [openai, anthropic, gemini, groq, deepseek, openrouter, xai, mistral, together, fireworks, ollama, azure, vllm, typesafe, cloudflare, cerebras, respan]",
+            "provider 'p': unknown vendor 'nope'; vendors: [openai, anthropic, gemini, groq, deepseek, openrouter, xai, mistral, together, fireworks, ollama, azure, vllm, typesafe, cloudflare, cerebras, empiriolabs, respan]",
         ),
         (
             "p = { formats = \"openai-chat\" }",
@@ -612,7 +612,7 @@ fn an_unknown_format_names_the_compiled_in_ones() {
     assert_eq!(
         resolve(text).err().as_deref(),
         Some(
-            "formats: unknown format 'nope'; compiled-in formats: [openai-chat, openai-responses, openai-realtime, responses-ws, openai-images, openai-transcriptions, openai-speech, openai-videos, openai-embeddings, anthropic-messages, gemini-generate, gemini-live, gemini-veo, typesafe-systemone, passthrough]"
+            "formats: unknown format 'nope'; compiled-in formats: [openai-chat, openai-responses, openai-realtime, responses-ws, openai-images, openai-transcriptions, openai-speech, openai-videos, openai-embeddings, anthropic-messages, gemini-generate, gemini-live, gemini-veo, empiriolabs-videos, typesafe-systemone, passthrough]"
         )
     );
 }
