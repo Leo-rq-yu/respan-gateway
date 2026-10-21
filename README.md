@@ -1,8 +1,22 @@
+<h1 align="center">
+  <a href="https://www.respan.ai"><img src="docs/assets/respan-logo.png" alt="Respan" width="64" valign="middle" /></a> Respan Gateway
+</h1>
+
+<p align="center">
+  <a href="https://github.com/respanai/respan-gateway/actions/workflows/ci.yml"><img src="https://github.com/respanai/respan-gateway/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI" /></a>
+  <a href="https://pypi.org/project/respan-gateway/"><img src="https://img.shields.io/pypi/v/respan-gateway?color=08C" alt="PyPI" /></a>
+  <a href="https://github.com/respanai/respan-gateway/releases"><img src="https://img.shields.io/github/v/release/respanai/respan-gateway?color=08C" alt="Latest release" /></a>
+  <a href="https://github.com/respanai/respan-gateway"><img src="https://img.shields.io/github/stars/respanai/respan-gateway?style=flat&amp;label=%E2%98%85&amp;color=08C" alt="GitHub stars" /></a>
+  <a href="#license"><img src="https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-08C" alt="License: MIT OR Apache-2.0" /></a>
+  <a href="https://discord.com/invite/KEanfAafQQ"><img src="https://img.shields.io/badge/Discord-Join%20the%20community-5865F2?logo=discord&amp;logoColor=white" alt="Join the Respan Discord" /></a>
+  <a href="https://x.com/RespanAI"><img src="https://img.shields.io/badge/X-%40RespanAI-000000?logo=x&amp;logoColor=white" alt="Follow Respan on X" /></a>
+</p>
+
+<p align="center"><a href="https://www.respan.ai"><b>respan.ai</b></a></p>
+
 ![Respan Gateway](docs/assets/respan-gateway-banner-v2.png)
 
 **[▶ Watch the demo](https://www.youtube.com/watch?v=pVv2ibXiTXM)**
-
-# Respan Gateway
 
 One endpoint for every LLM vendor. Point any official SDK at the gateway,
 name any model, and it routes the request to the right provider,
@@ -124,8 +138,8 @@ on a public address.
 
 **Vendors:** OpenAI, Anthropic, Gemini, Respan, TypeSafe, Groq, DeepSeek,
 OpenRouter, xAI, Mistral, Together, Fireworks, Ollama, Azure, vLLM,
-Cloudflare, Cerebras and Bedrock, plus any compatible endpoint; see [Vendors](docs/vendors.md)
-for their tiers, keys and formats. Translation details are in each
+Cloudflare, Cerebras, Perplexity and Bedrock, plus any compatible endpoint;
+see [Vendors](docs/vendors.md) for their tiers, keys and formats. Translation details are in each
 format's README, for [chat](crates/formats/conversation-http/README.md),
 [media](crates/formats/media-http/README.md) and
 [realtime](crates/formats/realtime-ws/README.md).
