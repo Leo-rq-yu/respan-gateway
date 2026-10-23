@@ -65,9 +65,12 @@ API, to providers only, at `https://api.empiriolabs.ai/v1` with a bearer key.
 
 - A `Create` is `POST /videos/generations`: its `seconds` `duration`, its
   `size` (`WxH`, else 400) an `aspect_ratio` in lowest terms and a
-  `resolution` (its short side, such as `720p`), its reference image
+  `resolution` (the tier nearest its short side: `480p`, `720p`, `1080p` or
+  `4k`), its reference image
   `image` (a URL, or a data URL of its bytes), and its `empiriolabs-videos`
-  native fields as they are, a field the kind has a place for winning.
+  native fields as they are, a field the kind has a place for winning. A
+  model that takes its `duration` as text, such as `"5s"`, is given it as
+  a native field, with no `seconds`.
 - A job is polled at `GET /jobs/{id}`, an endpoint EmpirioLabs AI shares with
   its other asynchronous kinds; its id is `empiriolabs_` and the provider's,
   as a path segment holds it; another id is not found, 404. `processing` is

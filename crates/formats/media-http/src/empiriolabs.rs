@@ -31,7 +31,8 @@ const PREFIX: &str = "empiriolabs_";
 /// `cancelled`, and `completed` with no video are `failed`.
 ///
 /// A creation's `seconds` goes as `duration`, its `size` as an
-/// `aspect_ratio` and a `resolution` (its short side, such as `720p`), its
+/// `aspect_ratio` and a `resolution` (the tier nearest its short side: `480p`,
+/// `720p`, `1080p` or `4k`), its
 /// reference image as `image`, a URL or a data URL, and its native fields of
 /// this format as they are.
 ///
@@ -171,8 +172,11 @@ fn image_of(media: &Media) -> String {
     }
 }
 
+/// The resolution tiers it takes, by the short side they are named for.
+const TIERS: [(u32, &str); 4] = [(480, "480p"), (720, "720p"), (1080, "1080p"), (2160, "4k")];
+
 /// The aspect ratio and resolution of a size `WxH`: its sides' ratio in
-/// lowest terms and its short side in pixels.
+/// lowest terms and the tier nearest its short side.
 fn aspect_of(size: &str) -> Result<(String, String), Fault> {
     let parsed = size.split_once(['x', 'X']).and_then(|(w, h)| {
         let (w, h) = (w.trim().parse::<u32>().ok()?, h.trim().parse::<u32>().ok()?);
@@ -184,8 +188,14 @@ fn aspect_of(size: &str) -> Result<(String, String), Fault> {
     let divisor = gcd(w, h);
     Ok((
         format!("{}:{}", w / divisor, h / divisor),
-        format!("{}p", w.min(h)),
+        tier_of(w.min(h)).to_owned(),
     ))
+}
+
+/// The tier whose short side is nearest `short`, the lower on a tie.
+fn tier_of(short: u32) -> &'static str {
+    let nearest = TIERS.iter().min_by_key(|(side, _)| side.abs_diff(short));
+    nearest.map_or("720p", |(_, tier)| tier)
 }
 
 fn gcd(a: u32, b: u32) -> u32 {
@@ -295,10 +305,21 @@ mod tests {
     }
 
     #[test]
+    fn a_sizes_short_side_is_the_nearest_tier() {
+        let tier = |size| aspect_of(size).expect("size").1;
+        assert_eq!(tier("1280x720"), "720p");
+        assert_eq!(tier("1024x576"), "480p");
+        assert_eq!(tier("640x360"), "480p");
+        assert_eq!(tier("1920x1080"), "1080p");
+        assert_eq!(tier("3840x2160"), "4k");
+        assert_eq!(tier("8192x4320"), "4k");
+    }
+
+    #[test]
     fn a_sizes_aspect_is_in_lowest_terms() {
         let aspect = |size| aspect_of(size).expect("size");
         assert_eq!(aspect("720x1280"), ("9:16".to_owned(), "720p".to_owned()));
-        assert_eq!(aspect("1024x1024"), ("1:1".to_owned(), "1024p".to_owned()));
+        assert_eq!(aspect("1024x1024"), ("1:1".to_owned(), "1080p".to_owned()));
     }
 
     #[test]
