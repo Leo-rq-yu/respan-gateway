@@ -61,6 +61,8 @@ path ending in `/v1/messages`; its provider base URL leaves the version out,
 such as `https://api.anthropic.com`, and `anthropic-version: 2023-06-01` is
 sent if the request names none.
 
+An OpenAI request's `inference_geo` is written as the same top-level field.
+
 Thinking is the kind's reasoning; its signature, and what else the kind has
 no form for, stays native to this format. Reasoning without its signature,
 which Anthropic refuses, is left out of a request. A full context window

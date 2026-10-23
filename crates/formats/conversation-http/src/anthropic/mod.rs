@@ -220,6 +220,16 @@ impl Schema for AnthropicMessages {
     const CARRIED: &'static [&'static str] = &["anthropic-version", "anthropic-beta"];
     const CARRIED_QUERY: &'static [&'static str] = &["beta"];
     const OWN: &'static [&'static str] = &["metadata", "output_config", "thinking"];
+    /// The geography to serve from, which both OpenAI formats may carry for
+    /// an Anthropic model.
+    const ADOPTED: &'static [(&'static str, &'static str, &'static str)] = &[
+        (crate::openai::OPENAI, "inference_geo", "inference_geo"),
+        (
+            crate::responses::RESPONSES,
+            "inference_geo",
+            "inference_geo",
+        ),
+    ];
     type Decoding = AnthropicDecoder;
 
     fn decoder(&self) -> AnthropicDecoder {

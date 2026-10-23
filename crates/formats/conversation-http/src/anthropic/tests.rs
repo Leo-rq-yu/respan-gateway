@@ -184,6 +184,18 @@ fn a_request_round_trips_through_a_conversation() {
 }
 
 #[test]
+fn a_chat_requests_inference_geo_is_written_as_the_messages_field() {
+    let body = json!({ "model": "claude", "inference_geo": "us",
+        "messages": [{ "role": "user", "content": "hi" }] });
+    let chat = crate::openai::OpenAiChat.decode_request(Bytes::from(body.to_string()));
+    let written = chat.and_then(|chat| AnthropicMessages.encode_request(&chat));
+    assert_eq!(
+        written.ok().map(|v| v["inference_geo"].clone()),
+        Some(json!("us"))
+    );
+}
+
+#[test]
 fn the_metadata_user_id_is_the_user() {
     let body = json!({ "model": "c", "max_tokens": 5,
         "metadata": { "user_id": "bob@x.io" },
