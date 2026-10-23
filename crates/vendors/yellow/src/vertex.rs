@@ -6,7 +6,7 @@ use respan_gateway_conversation_http::dialect::{Dialect, Dialected};
 use respan_gateway_conversation_http::gemini::GeminiGenerate;
 use respan_gateway_conversation_http::openai::OpenAiChat;
 use respan_gateway_media_http::dialect::{Dialect as MediaDialect, Dialected as MediaDialected};
-use respan_gateway_media_http::gemini::GeminiImages;
+use respan_gateway_media_http::gemini::{GeminiImages, VertexVeo};
 use serde_json::Value;
 
 use respan_gateway_vendor_kit::{
@@ -38,6 +38,7 @@ pub const VENDOR: Vendor = Vendor {
     formats: &[
         (&Dialected::new(GeminiGenerate, Vertex), Some(API)),
         (&MediaDialected::new(GeminiImages, Vertex), Some(API)),
+        (&VertexVeo, Some(API)),
         (&OpenAiChat, Some(OPENAI_API)),
     ],
     models: list_models,

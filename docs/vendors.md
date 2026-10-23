@@ -47,7 +47,7 @@ Each vendor is in one of two tiers:
 | <img src="assets/vendors/cloudflare.svg" width="20" height="20" alt=""> | Cloudflare | `cloudflare` | `CLOUDFLARE_API_TOKEN` | `openai-chat`, `openai-embeddings` |
 | <img src="assets/vendors/cerebras.svg" width="20" height="20" alt=""> | Cerebras | `cerebras` | `CEREBRAS_API_KEY` | `openai-chat` |
 | <img src="assets/vendors/perplexity.svg" width="20" height="20" alt=""> | Perplexity | `perplexity` | `PERPLEXITY_API_KEY` | `openai-responses` |
-| <img src="assets/vendors/gemini.svg" width="20" height="20" alt=""> | Google Vertex AI | `vertex` | `GOOGLE_VERTEX_ACCESS_TOKEN` or `CLOUDSDK_AUTH_ACCESS_TOKEN` | `gemini-generate`, `gemini-images`, `openai-chat` |
+| <img src="assets/vendors/gemini.svg" width="20" height="20" alt=""> | Google Vertex AI | `vertex` | `GOOGLE_VERTEX_ACCESS_TOKEN` or `CLOUDSDK_AUTH_ACCESS_TOKEN` | `gemini-generate`, `gemini-images`, `vertex-veo`, `openai-chat` |
 
 These tables are kept by hand: a vendor added to `ALL` in
 [`crates/vendors`](../crates/vendors/README.md), or a format added to a
@@ -79,8 +79,8 @@ Perplexity's Agent API speaks `openai-responses` alone, at
 `https://api.perplexity.ai/v1`; its models are named `<vendor>/<model>`,
 such as `openai/gpt-5.6-sol`.
 
-Vertex AI's formats are under a project and location: `gemini-generate` and
-`gemini-images` at
+Vertex AI's formats are under a project and location: `gemini-generate`,
+`gemini-images` and `vertex-veo` at
 `https://{location}-aiplatform.googleapis.com/v1/projects/{project}/locations/{location}/publishers/google`
 and `openai-chat` at the same up to `/endpoints/openapi` (models named
 `google/gemini-2.5-flash`), both with a Google access token as the bearer
@@ -88,7 +88,9 @@ key. The `global` location has no region in its host
 (`https://aiplatform.googleapis.com/v1/projects/..`), so give it as the
 `base_url`. Express mode's API keys are not taken: the key is sent only as a
 bearer token. `gemini-images` draws with Gemini's image models through
-`generateContent`; Imagen's `:predict` is not spoken.
+`generateContent`; Imagen's `:predict` is not spoken. `vertex-veo` polls its
+operation with a `POST` and serves the video's bytes from the finished
+operation, so a `storageUri` is refused.
 
 Respan's formats sit under one API, `https://api.respan.ai/api`:
 `openai-chat` and `openai-responses` at it, `anthropic-messages` at
