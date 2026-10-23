@@ -12,7 +12,7 @@ use serde_json::{Map, Value, json};
 
 use respan_gateway_conversation_http::gemini::{GeminiGenerate, needs_signatures};
 use respan_gateway_conversation_http::openai::OpenAiChat;
-use respan_gateway_media_http::gemini::{GeminiImages, GeminiVeo};
+use respan_gateway_media_http::gemini::{GeminiImages, GeminiTranscriptions, GeminiVeo};
 use respan_gateway_media_http::openai::OpenAiEmbeddings;
 use respan_gateway_realtime_ws::GeminiLive;
 
@@ -43,6 +43,7 @@ pub const VENDOR: Vendor = Vendor {
         (&Dialected::new(OpenAiChat, Gemini), Some(OPENAI_API)),
         (&GeminiLive, Some(LIVE)),
         (&GeminiImages, Some(API)),
+        (&GeminiTranscriptions, Some(API)),
         (&GeminiVeo, Some(API)),
         (&OpenAiEmbeddings, Some(OPENAI_API)),
     ],

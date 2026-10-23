@@ -130,6 +130,25 @@ at `https://generativelanguage.googleapis.com/v1beta` with the key in
   `raiMediaFilteredReasons`; a refusal is Google's `{"error": {code,
   message, status}}`. Veo reports no progress: an operation is done or not.
 
+`gemini::GeminiTranscriptions`, named `gemini-transcriptions`: a Gemini
+model as a transcriber, through `generateContent`, to providers only, at
+the Gemini API's base (`x-goog-api-key`) or Vertex AI's.
+
+- A call is `POST /models/{model}:generateContent`, one user turn of the
+  audio (`inlineData`, or `fileData` for audio at a URL) and a text
+  instruction that asks for the words spoken, or for a translation to
+  English, and names the `language` and `prompt`; the `temperature` is a
+  `generationConfig`'s. Its native fields (`gemini-transcriptions`) go in
+  the body.
+- Gemini gives the text alone: of an OpenAI client's native fields only
+  `response_format` `json` and `text` are taken (the client is answered as
+  it asked); `verbose_json`, `srt`, `vtt`, `diarized_json`, timestamp
+  granularities and the rest are refused, 400 `unsupported`, before any call.
+- The answer's text, not its thoughts', is the transcript, and its
+  `usageMetadata` is token usage, its per-modality counts (audio tokens
+  among them) a native event. An answer with no text and a block or finish
+  reason is 400 `no_transcript`.
+
 `gemini::VertexVeo`, named `vertex-veo`: Veo as Vertex AI serves it, to
 providers only, at
 `https://{location}-aiplatform.googleapis.com/v1/projects/{project}/locations/{location}/publishers/google`

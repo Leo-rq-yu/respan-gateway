@@ -26,7 +26,7 @@ Each vendor is in one of two tiers:
 |:-:|---|---|---|---|
 | <picture><source media="(prefers-color-scheme: dark)" srcset="assets/vendors/openai-dark.svg"><img src="assets/vendors/openai.svg" width="20" height="20" alt=""></picture> | OpenAI | `openai` | `OPENAI_API_KEY` | `openai-chat`, `openai-responses`, `openai-realtime`, `responses-ws`, `openai-images`, `openai-transcriptions`, `openai-speech`, `openai-embeddings` |
 | <picture><source media="(prefers-color-scheme: dark)" srcset="assets/vendors/anthropic-dark.svg"><img src="assets/vendors/anthropic.svg" width="20" height="20" alt=""></picture> | Anthropic | `anthropic` | `ANTHROPIC_API_KEY` | `anthropic-messages` |
-| <img src="assets/vendors/gemini.svg" width="20" height="20" alt=""> | Gemini | `gemini` | `GEMINI_API_KEY` or `GOOGLE_API_KEY` | `gemini-generate`, `openai-chat`, `gemini-live`, `gemini-images`, `gemini-veo`, `openai-embeddings` |
+| <img src="assets/vendors/gemini.svg" width="20" height="20" alt=""> | Gemini | `gemini` | `GEMINI_API_KEY` or `GOOGLE_API_KEY` | `gemini-generate`, `openai-chat`, `gemini-live`, `gemini-images`, `gemini-transcriptions`, `gemini-veo`, `openai-embeddings` |
 | <picture><source media="(prefers-color-scheme: dark)" srcset="assets/vendors/respan-dark.svg"><img src="assets/vendors/respan.svg" width="20" height="20" alt=""></picture> | Respan | `respan` | `RESPAN_API_KEY` | `openai-chat`, `openai-responses`, `anthropic-messages`, `gemini-generate`, `decisions` |
 | <img src="assets/vendors/typesafe.png" width="20" height="20" alt=""> | TypeSafe | `typesafe` | `TYPESAFE_API_KEY` | `decisions` |
 
@@ -47,7 +47,7 @@ Each vendor is in one of two tiers:
 | <img src="assets/vendors/cloudflare.svg" width="20" height="20" alt=""> | Cloudflare | `cloudflare` | `CLOUDFLARE_API_TOKEN` | `openai-chat`, `openai-embeddings` |
 | <img src="assets/vendors/cerebras.svg" width="20" height="20" alt=""> | Cerebras | `cerebras` | `CEREBRAS_API_KEY` | `openai-chat` |
 | <img src="assets/vendors/perplexity.svg" width="20" height="20" alt=""> | Perplexity | `perplexity` | `PERPLEXITY_API_KEY` | `openai-responses` |
-| <img src="assets/vendors/gemini.svg" width="20" height="20" alt=""> | Google Vertex AI | `vertex` | `GOOGLE_VERTEX_ACCESS_TOKEN` or `CLOUDSDK_AUTH_ACCESS_TOKEN` | `gemini-generate`, `gemini-images`, `vertex-veo`, `openai-chat` |
+| <img src="assets/vendors/gemini.svg" width="20" height="20" alt=""> | Google Vertex AI | `vertex` | `GOOGLE_VERTEX_ACCESS_TOKEN` or `CLOUDSDK_AUTH_ACCESS_TOKEN` | `gemini-generate`, `gemini-images`, `gemini-transcriptions`, `vertex-veo`, `openai-chat` |
 
 These tables are kept by hand: a vendor added to `ALL` in
 [`crates/vendors`](../crates/vendors/README.md), or a format added to a
@@ -66,7 +66,8 @@ formats (`openai-images`, `openai-transcriptions`, `openai-speech`,
 `openai-videos`, `openai-embeddings`) and `openai-responses` take the same
 base URL as `openai-chat`. Gemini's own formats, `gemini-generate`
 (`generateContent` and `streamGenerateContent`, the model in the path),
-`gemini-images` (its image models' `generateContent`) and `gemini-veo`,
+`gemini-images` (its image models' `generateContent`),
+`gemini-transcriptions` (transcription by `generateContent`) and `gemini-veo`,
 take `https://generativelanguage.googleapis.com/v1beta` with
 the key in `x-goog-api-key`. Session formats take a `wss://` URL as their
 SDK does: `wss://api.openai.com/v1` for `openai-realtime` and
@@ -80,7 +81,7 @@ Perplexity's Agent API speaks `openai-responses` alone, at
 such as `openai/gpt-5.6-sol`.
 
 Vertex AI's formats are under a project and location: `gemini-generate`,
-`gemini-images` and `vertex-veo` at
+`gemini-images`, `gemini-transcriptions` and `vertex-veo` at
 `https://{location}-aiplatform.googleapis.com/v1/projects/{project}/locations/{location}/publishers/google`
 and `openai-chat` at the same up to `/endpoints/openapi` (models named
 `google/gemini-2.5-flash`), both with a Google access token as the bearer
@@ -88,7 +89,8 @@ key. The `global` location has no region in its host
 (`https://aiplatform.googleapis.com/v1/projects/..`), so give it as the
 `base_url`. Express mode's API keys are not taken: the key is sent only as a
 bearer token. `gemini-images` draws with Gemini's image models through
-`generateContent`; Imagen's `:predict` is not spoken. `vertex-veo` polls its
+`generateContent`; Imagen's `:predict` is not spoken. `gemini-transcriptions` asks a Gemini
+model for the text of audio, and so gives the text alone. `vertex-veo` polls its
 operation with a `POST` and serves the video's bytes from the finished
 operation, so a `storageUri` is refused.
 

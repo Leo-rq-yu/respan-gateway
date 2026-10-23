@@ -1,15 +1,17 @@
 //! Google's media models as the Gemini API serves them, over HTTP: Veo
 //! ([`GeminiVeo`]), and its image models through `generateContent`
-//! ([`GeminiImages`]); and Veo as Vertex AI serves it ([`VertexVeo`]). A
+//! ([`GeminiImages`]) and transcriptions ([`GeminiTranscriptions`]); and Veo as Vertex AI serves it ([`VertexVeo`]). A
 //! Gemini provider's base URL includes the version,
 //! `https://generativelanguage.googleapis.com/v1beta`, and its transport the
 //! key, `x-goog-api-key`.
 
 mod images;
+mod transcriptions;
 mod veo;
 mod vertex_veo;
 
 pub use images::GeminiImages;
+pub use transcriptions::GeminiTranscriptions;
 pub use veo::GeminiVeo;
 pub use vertex_veo::VertexVeo;
 
