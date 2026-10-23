@@ -66,6 +66,18 @@ pub fn forwarded_path(path: &str) -> String {
     }
 }
 
+/// `text` escaped as a path segment or query value: all but RFC 3986's
+/// unreserved characters, so a model id such as an ARN stays one segment.
+pub fn escape(text: &str) -> String {
+    use percent_encoding::{NON_ALPHANUMERIC, utf8_percent_encode};
+    const UNRESERVED: &percent_encoding::AsciiSet = &NON_ALPHANUMERIC
+        .remove(b'-')
+        .remove(b'.')
+        .remove(b'_')
+        .remove(b'~');
+    utf8_percent_encode(text, UNRESERVED).to_string()
+}
+
 /// Whether a request's path, in `uri`, ends in `suffix`, however it is
 /// spelled (see [`clean_path`]).
 pub fn path_ends_with(uri: &http::Uri, suffix: &str) -> bool {

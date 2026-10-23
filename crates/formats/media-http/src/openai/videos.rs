@@ -17,7 +17,7 @@ use respan_gateway_http::http::header::CONTENT_TYPE;
 use respan_gateway_http::http::{
     self, HeaderValue, Method, Uri, request::Parts as RequestHead, response::Parts as ResponseHead,
 };
-use respan_gateway_http::path::forwarded_path;
+use respan_gateway_http::path::{escape, forwarded_path};
 use respan_gateway_http::{All, ClientIo, Decoder, Encoder, ProviderIo, Whole};
 use respan_gateway_http::{Connect, Upstream};
 use respan_gateway_media::video::{Create, Input, Job, JobError, Jobs, Output, Status, Variant};
