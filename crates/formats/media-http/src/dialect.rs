@@ -68,8 +68,8 @@ pub(crate) fn bind<S: Spec>(spec: S, io: ProviderIo) -> Connection<S::Output, S:
 
 /// How a vendor departs from a media spec it speaks, of input `I` and
 /// output `O`: what it takes, before the spec writes it, where it is
-/// served, how its answer is read, and whether it streams. What it does not say is
-/// the spec's.
+/// served, how its answer is read, and whether it streams. What it does not
+/// say is the spec's.
 pub trait Dialect<I, O>: Clone + Send + Sync + 'static {
     /// The input as the vendor takes it, before the spec writes it: `input`
     /// itself, unless the vendor takes it otherwise; `Err` refuses it
@@ -207,5 +207,57 @@ where
 
     fn end(&mut self, end: Result<(), Fault>, out: &mut Vec<Bytes>) -> Result<(), Fault> {
         self.encoder.end(end, out)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::openai::OpenAiImages;
+    use futures::SinkExt;
+    use respan_gateway_core::{EventStream, Extensions};
+    use respan_gateway_http::{Body, connect};
+    use respan_gateway_media::image;
+    use std::sync::{Arc, Mutex};
+
+    #[derive(Clone)]
+    struct Same;
+
+    impl Dialect<image::Input, image::Output> for Same {}
+
+    #[derive(Clone)]
+    struct Elsewhere;
+
+    impl Dialect<image::Input, image::Output> for Elsewhere {
+        fn path(&self) -> Option<&'static str> {
+            Some("/pictures")
+        }
+    }
+
+    /// The path of the call `format` makes of an image request.
+    fn called<F>(format: F) -> Option<String>
+    where
+        F: Format<ProviderIo, image::Output, image::Input>,
+    {
+        let path = Arc::new(Mutex::new(None));
+        let seen = Arc::clone(&path);
+        let send = move |request: http::Request<Body>| {
+            *seen.lock().expect("lock") = Some(request.uri().path().to_owned());
+            async { Ok((http::Response::new(Body::full("{}")), None)) }
+        };
+        let io = connect(send, 1024)(Extensions::new());
+        let (incoming, mut outgoing) = format.bind(io).expect("bound");
+        let mut input = EventStream::single(image::Input::new("a fox"));
+        assert!(outgoing.prepare(&mut input).is_ok());
+        _ = futures::executor::block_on(async { futures::join!(incoming, outgoing.close()) });
+        path.lock().expect("lock").clone()
+    }
+
+    #[test]
+    fn a_dialect_serves_a_call_at_its_path_else_the_specs() {
+        let own = called(Dialected::new(OpenAiImages, Elsewhere));
+        assert_eq!(own.as_deref(), Some("/pictures"));
+        let spec = called(Dialected::new(OpenAiImages, Same));
+        assert_eq!(spec.as_deref(), Some("/images/generations"));
     }
 }

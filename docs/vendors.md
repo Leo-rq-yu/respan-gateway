@@ -68,8 +68,8 @@ base URL as `openai-chat`. Gemini's own formats, `gemini-generate`
 `gemini-images` (its image models' `generateContent`) and `gemini-veo`,
 take `https://generativelanguage.googleapis.com/v1beta` with
 the key in `x-goog-api-key`. OpenRouter's `openrouter-videos` takes the base
-URL of its `openai-chat`, `https://openrouter.ai/api/v1`. Session formats take a `wss://` URL as their
-SDK does: `wss://api.openai.com/v1` for `openai-realtime` and
+URL of its `openai-chat`, `https://openrouter.ai/api/v1`. Session formats take
+a `wss://` URL as their SDK does: `wss://api.openai.com/v1` for `openai-realtime` and
 `responses-ws`, `wss://generativelanguage.googleapis.com` for `gemini-live`,
 `wss://api.mistral.ai/v1` for `mistral-realtime`: Mistral's realtime
 transcription, the key a bearer token and the model at `?model=`, which

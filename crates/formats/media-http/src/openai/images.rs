@@ -182,7 +182,7 @@ fn data_url(url: &str) -> Option<(String, Bytes)> {
 }
 
 /// `media` as a data URL.
-fn to_data_url(media: &Media, bytes: &[u8]) -> String {
+pub(crate) fn to_data_url(media: &Media, bytes: &[u8]) -> String {
     format!("data:{};base64,{}", media.mime_type, b64(bytes))
 }
 

@@ -2,8 +2,7 @@
 //! [`video`](respan_gateway_media::video) kind, [`OpenRouterVideos`].
 
 use crate::edge::{bind_provider, content, sends};
-use base64::Engine;
-use base64::engine::general_purpose::STANDARD;
+use crate::openai::{escape, to_data_url};
 use respan_gateway_conversation::{Media, MediaSource};
 use respan_gateway_conversation_http::fields::{kept, native_of};
 use respan_gateway_core::Provider;
@@ -96,17 +95,6 @@ enum Call {
     Content,
 }
 
-/// `id` escaped as a path segment: all but RFC 3986's unreserved characters.
-fn escape(id: &str) -> String {
-    use percent_encoding::{NON_ALPHANUMERIC, utf8_percent_encode};
-    const UNRESERVED: &percent_encoding::AsciiSet = &NON_ALPHANUMERIC
-        .remove(b'-')
-        .remove(b'.')
-        .remove(b'_')
-        .remove(b'~');
-    utf8_percent_encode(id, UNRESERVED).to_string()
-}
-
 /// The call of `input`: its method and path, its body's encoder, and what
 /// it asks.
 fn call(head: &mut RequestHead, input: &Input) -> Result<(Box<dyn Encoder<Input>>, Call), Fault> {
@@ -148,9 +136,7 @@ fn call(head: &mut RequestHead, input: &Input) -> Result<(Box<dyn Encoder<Input>
 fn image_part(media: &Media) -> Value {
     let url = match &media.source {
         MediaSource::Url(url) => url.clone(),
-        MediaSource::Bytes(bytes) => {
-            format!("data:{};base64,{}", media.mime_type, STANDARD.encode(bytes))
-        }
+        MediaSource::Bytes(bytes) => to_data_url(media, bytes),
     };
     json!({ "type": "image_url", "image_url": { "url": url } })
 }

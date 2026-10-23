@@ -1,5 +1,5 @@
-//! OpenRouter: Chat Completions, embeddings, transcriptions, speech,
-//! images and videos, for many vendors' models; speech and images in its dialect.
+//! OpenRouter: Chat Completions, embeddings, transcriptions, speech, images
+//! and videos, for many vendors' models; speech and images in its dialect.
 
 use std::borrow::Cow;
 use std::collections::HashMap;
