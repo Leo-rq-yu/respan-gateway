@@ -9,7 +9,7 @@ use super::{
     merge_missing, missing, native_of, rest_of, sends, set, take_count, take_string, unreadable,
     whole_json, write_field,
 };
-use crate::edge::{bind_provider, content, escape};
+use crate::edge::{bind_provider, content};
 use respan_gateway_core::Provider;
 use respan_gateway_core::{Connection, ErrorCode, Fault, Format};
 use respan_gateway_http::bytes::Bytes;

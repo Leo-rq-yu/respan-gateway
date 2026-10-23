@@ -1650,6 +1650,7 @@ dependencies = [
  "percent-encoding",
  "respan-gateway-conversation",
  "respan-gateway-core",
+ "respan-gateway-eventstream",
  "respan-gateway-http",
  "respan-gateway-http-faults",
  "respan-gateway-sse",

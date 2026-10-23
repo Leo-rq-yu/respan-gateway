@@ -18,11 +18,12 @@ use respan_gateway_http::bytes::Bytes;
 use respan_gateway_http::http::HeaderValue;
 use respan_gateway_http::http::header::CONTENT_TYPE;
 use respan_gateway_http::http::response::Parts as ResponseHead;
+use respan_gateway_http::path::escape;
 use respan_gateway_http::{Connect, Decoder, Upstream, Whole};
 use respan_gateway_media::embedding::{Embedding, Input, Item, Output, Start};
 use serde_json::{Value, json};
 
-use crate::edge::{bind_provider, escape, sends};
+use crate::edge::{bind_provider, sends};
 use crate::openai::OpenAiEmbeddings;
 
 const NAME: &str = "bedrock-embeddings";
