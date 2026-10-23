@@ -34,6 +34,7 @@ fn list_models(p: &VendorProvider) -> BoxFuture<'_, Models> {
         let model = |m: &Value| {
             let mut model = Model::new(m["modelId"].as_str()?);
             model.display_name = m["modelName"].as_str().map(str::to_owned);
+            model.kind = Some("embedding".to_owned());
             Some(model)
         };
         Ok(summaries.filter_map(model).collect())
