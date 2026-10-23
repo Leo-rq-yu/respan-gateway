@@ -14,7 +14,7 @@ use respan_gateway_media::image::{Image, Input, Output, Start};
 use serde_json::{Map, Number, Value};
 
 use crate::edge::{bind_provider, escape, sends};
-use crate::openai::OpenAiImages;
+use crate::openai::{OpenAiImages, sniff};
 
 const NAME: &str = "bedrock-images";
 
@@ -58,8 +58,7 @@ const NUMBERS: &[&str] = &[
 /// the aspect ratio the nearest Stability takes to the request's `size`;
 /// Stable Diffusion 3.5 (with `mode`) and Ultra take an edit as
 /// image-to-image; the style guide draws from a prompt in the style of its
-/// image. Every
-/// service takes the edit's first image as `image` (style transfer's
+/// image. Every service takes the edit's first image as `image` (style transfer's
 /// `init_image`, with the second as `style_image`) and the inpaint and
 /// erase services its mask; the prompt is left out of the services that
 /// take none. The request's native fields (`seed`, `negative_prompt`,
@@ -341,7 +340,8 @@ fn read_answer(raw: Bytes, out: &mut Vec<Output>) -> Result<(), Fault> {
     for image in images {
         let bytes = image.as_str().and_then(|b| STANDARD.decode(b.trim()).ok());
         let bytes = bytes.ok_or_else(|| Fault::upstream("a Bedrock image is not base64"))?;
-        let mime = mime_of(&bytes);
+        let mime = sniff(&bytes).filter(|m| m.starts_with("image/"));
+        let mime = mime.unwrap_or("image/png");
         out.push(Output::Image(Image::new(Media::new(
             mime,
             MediaSource::Bytes(Bytes::from(bytes)),
@@ -356,29 +356,6 @@ fn refused(reason: &str) -> Fault {
         true => Fault::bad_request(format!("Bedrock filtered the image: {reason}"))
             .with(ErrorCode("content_filter".into())),
         false => Fault::upstream(format!("Bedrock made no image: {reason}")),
-    }
-}
-
-/// The image type `bytes` begin as, PNG unless they say another.
-fn mime_of(bytes: &[u8]) -> &'static str {
-    match bytes {
-        [0xFF, 0xD8, 0xFF, ..] => "image/jpeg",
-        [
-            b'R',
-            b'I',
-            b'F',
-            b'F',
-            _,
-            _,
-            _,
-            _,
-            b'W',
-            b'E',
-            b'B',
-            b'P',
-            ..,
-        ] => "image/webp",
-        _ => "image/png",
     }
 }
 
