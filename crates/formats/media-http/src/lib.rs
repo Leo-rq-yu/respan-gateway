@@ -6,7 +6,7 @@
 //! - [`gemini`]: Google's Veo and image models, as the Gemini API serves
 //!   them, of the video and image kinds.
 //! - [`bedrock`]: Amazon Bedrock's InvokeModel, a provider of the embedding
-//!   kind.
+//!   and image kinds.
 //! - [`dialect`]: a format as a vendor speaks it, its departures from the
 //!   spec in the vendor's [`Dialect`](dialect::Dialect).
 

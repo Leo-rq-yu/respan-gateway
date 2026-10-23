@@ -1,5 +1,6 @@
-//! Amazon Bedrock's InvokeModel, over HTTP: a provider format of the
-//! [`embedding`](respan_gateway_media::embedding) kind, [`BedrockEmbeddings`].
+//! Amazon Bedrock's InvokeModel, over HTTP: provider formats of the
+//! [`embedding`](respan_gateway_media::embedding) kind, [`BedrockEmbeddings`],
+//! and the [`image`](respan_gateway_media::image) kind, [`BedrockImages`].
 //! A provider's base URL is its region's runtime,
 //! `https://bedrock-runtime.{region}.amazonaws.com`, and its transport the
 //! key: a Bedrock API key as a bearer token, or a signature its host adds.
@@ -21,6 +22,10 @@ use respan_gateway_http::http::response::Parts as ResponseHead;
 use respan_gateway_http::{Connect, Decoder, Upstream, Whole};
 use respan_gateway_media::embedding::{Embedding, Input, Item, Output, Start};
 use serde_json::{Value, json};
+
+mod images;
+
+pub use images::BedrockImages;
 
 use crate::edge::{bind_provider, escape, sends};
 use crate::openai::OpenAiEmbeddings;

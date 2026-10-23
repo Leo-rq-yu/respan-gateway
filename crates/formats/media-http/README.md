@@ -154,3 +154,35 @@ a Bedrock API key as a bearer token.
   header, Cohere's only count.
 - Texts alone: token ids, parts, a `dimensions` the model does not take and
   fields of another format are refused, 400, before any call.
+
+`bedrock::BedrockImages`, named `bedrock-images`: Amazon Bedrock's
+InvokeModel for Stability AI images, a provider of the image kind, at the
+same runtime and key as `bedrock-embeddings`.
+
+- A call is `POST /model/{model}/invoke`, the model (or inference profile,
+  `us.stability.stable-image-inpaint-v1:0`) escaped in the path. One image
+  per call: a request for more is refused, 400.
+- A generation (`stability.sd3-5-large-v1:0`,
+  `stability.stable-image-core-v1:1`, `stability.stable-image-ultra-v1:1`)
+  is `{prompt, aspect_ratio, output_format}`, the aspect ratio the nearest
+  Stability takes to the request's `size`; Stable Diffusion 3.5 (with
+  `mode`) and Ultra take an edit as image-to-image (`image`); the style
+  guide draws from the prompt, with `size` too, in its image's style.
+  Stability's models are offered in a few regions only (`us-west-2` for
+  most), which is not checked here.
+- An Image Service (inpaint, outpaint, erase, search and replace, search
+  and recolor, remove background, style transfer, style guide, control
+  sketch and structure, the fast, creative and conservative upscales) takes
+  the edit's first image as base64 `image` (style transfer: `init_image`,
+  with the second as `style_image`), the inpaint and erase services its
+  `mask`, and a prompt but for erase, remove background and the fast
+  upscale. Images are bytes, not URLs.
+- The request's native fields (`seed`, `negative_prompt`, `search_prompt`,
+  `select_prompt`, `grow_mask`, `control_strength`, `fidelity`,
+  `creativity`, `left`/`right`/`up`/`down`, ...) are the service's own and
+  pass through, a form's numbers as numbers.
+- An answer is `{images, finish_reasons, seeds}`: an image per entry of
+  `images`, its type read from its bytes. A `finish_reasons` entry that is
+  not null is a fault: a content filter's is a 400 coded `content_filter`,
+  another a provider fault. Bedrock reports no tokens, so the images are
+  the usage.

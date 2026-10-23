@@ -47,7 +47,7 @@ Each vendor is in one of two tiers:
 | <img src="assets/vendors/cloudflare.svg" width="20" height="20" alt=""> | Cloudflare | `cloudflare` | `CLOUDFLARE_API_TOKEN` | `openai-chat`, `openai-embeddings` |
 | <img src="assets/vendors/cerebras.svg" width="20" height="20" alt=""> | Cerebras | `cerebras` | `CEREBRAS_API_KEY` | `openai-chat` |
 | <img src="assets/vendors/perplexity.svg" width="20" height="20" alt=""> | Perplexity | `perplexity` | `PERPLEXITY_API_KEY` | `openai-responses` |
-| <img src="assets/vendors/bedrock.svg" width="20" height="20" alt=""> | Amazon Bedrock | `bedrock` | `AWS_BEARER_TOKEN_BEDROCK` | `bedrock-embeddings` |
+| <img src="assets/vendors/bedrock.svg" width="20" height="20" alt=""> | Amazon Bedrock | `bedrock` | `AWS_BEARER_TOKEN_BEDROCK` | `bedrock-embeddings`, `bedrock-images` |
 
 These tables are kept by hand: a vendor added to `ALL` in
 [`crates/vendors`](../crates/vendors/README.md), or a format added to a
@@ -68,10 +68,11 @@ base URL as `openai-chat`. Gemini's own formats, `gemini-generate`
 (`generateContent` and `streamGenerateContent`, the model in the path),
 `gemini-images` (its image models' `generateContent`) and `gemini-veo`,
 take `https://generativelanguage.googleapis.com/v1beta` with
-the key in `x-goog-api-key`. Bedrock's `bedrock-embeddings` (InvokeModel, the model
-in the path) takes its region's runtime,
-`https://bedrock-runtime.{region}.amazonaws.com`, with a Bedrock API key as
-a bearer token. Session formats take a `wss://` URL as their
+the key in `x-goog-api-key`. Bedrock's `bedrock-embeddings` and
+`bedrock-images` (InvokeModel, the model in the path) take their region's
+runtime, `https://bedrock-runtime.{region}.amazonaws.com`, with a Bedrock
+API key as a bearer token; the Stability models are offered in a few
+regions only (`us-west-2` for most). Session formats take a `wss://` URL as their
 SDK does: `wss://api.openai.com/v1` for `openai-realtime` and
 `responses-ws`, `wss://generativelanguage.googleapis.com` for `gemini-live`,
 `wss://api.mistral.ai/v1` for `mistral-realtime`: Mistral's realtime
