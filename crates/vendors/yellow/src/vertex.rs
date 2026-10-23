@@ -5,6 +5,8 @@ use respan_gateway_conversation_http::Schema;
 use respan_gateway_conversation_http::dialect::{Dialect, Dialected};
 use respan_gateway_conversation_http::gemini::GeminiGenerate;
 use respan_gateway_conversation_http::openai::OpenAiChat;
+use respan_gateway_media_http::dialect::{Dialect as MediaDialect, Dialected as MediaDialected};
+use respan_gateway_media_http::gemini::GeminiImages;
 use serde_json::Value;
 
 use respan_gateway_vendor_kit::{
@@ -35,18 +37,25 @@ pub const VENDOR: Vendor = Vendor {
     key_env: &["GOOGLE_VERTEX_ACCESS_TOKEN", "CLOUDSDK_AUTH_ACCESS_TOKEN"],
     formats: &[
         (&Dialected::new(GeminiGenerate, Vertex), Some(API)),
+        (&MediaDialected::new(GeminiImages, Vertex), Some(API)),
         (&OpenAiChat, Some(OPENAI_API)),
     ],
     models: list_models,
     ..Vendor::DEFAULT
 };
 
-/// Vertex's `generateContent`: its key a bearer token, not Gemini's
-/// `x-goog-api-key`.
+/// Vertex's `generateContent`, for chats and media: its key a bearer
+/// token, not Gemini's `x-goog-api-key`.
 #[derive(Debug, Clone, Copy)]
 pub struct Vertex;
 
 impl Dialect for Vertex {
+    fn key(&self) -> Option<KeyIn> {
+        Some(KeyIn::Bearer)
+    }
+}
+
+impl<I, O> MediaDialect<I, O> for Vertex {
     fn key(&self) -> Option<KeyIn> {
         Some(KeyIn::Bearer)
     }
@@ -114,6 +123,18 @@ mod tests {
     fn its_key_is_a_bearer_token() {
         let format = Dialected::new(GeminiGenerate, Vertex);
         assert_eq!(Upstream::key(&format), KeyIn::Bearer);
+    }
+
+    #[test]
+    fn its_images_are_under_the_project_and_take_a_bearer_token() {
+        let format = MediaDialected::new(GeminiImages, Vertex);
+        assert_eq!(Upstream::key(&format), KeyIn::Bearer);
+        assert!(
+            VENDOR
+                .formats
+                .iter()
+                .any(|(f, base)| { f.name() == GeminiImages::NAME && *base == Some(API) })
+        );
     }
 
     #[test]
