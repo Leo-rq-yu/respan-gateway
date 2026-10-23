@@ -222,12 +222,14 @@ impl Models {
             return Ok(Vec::new());
         };
         let models = listed.map_err(|r| format!("{}: {}", listing.provider, r.why))?;
-        // The list's models, each with the config's declaration laid over
-        // it, then the models it declares that the list does not name.
+        // The list's models, each of the kind the list says, else its name,
+        // with the config's declaration laid over it; then the models it
+        // declares that the list does not name.
         let mut cards: Vec<Model> = models;
         for card in &mut cards {
             card.provider.clone_from(&listing.provider);
-            card.kind = Some(kind_of(&card.id).to_owned());
+            card.kind
+                .get_or_insert_with(|| kind_of(&card.id).to_owned());
             if let Some(declared) = listing.declared.iter().find(|d| d.id == card.id) {
                 card.overlay(declared);
             }
@@ -266,16 +268,27 @@ impl Models {
 
 /// What a model does, by its name as vendors spell them; chat unless the
 /// name says otherwise.
-fn kind_of(id: &str) -> &'static str {
+pub(crate) fn kind_of(id: &str) -> &'static str {
     let id = id.to_ascii_lowercase();
     let has = |words: &[&str]| words.iter().any(|w| id.contains(w));
     match () {
         _ if has(&["embed"]) => kind::EMBEDDING,
-        _ if has(&["dall-e", "gpt-image", "imagen", "grok-2-image", "flux"]) => kind::IMAGE,
+        _ if has(&[
+            "dall-e",
+            "gpt-image",
+            "imagen",
+            "-image",
+            "nano-banana",
+            "flux",
+        ]) =>
+        {
+            kind::IMAGE
+        }
+        // Before transcription: a realtime transcriber is a session.
+        _ if has(&["realtime", "-live", "live-", "native-audio"]) => kind::REALTIME,
         _ if has(&["whisper", "transcribe"]) => kind::TRANSCRIPTION,
         _ if has(&["tts"]) => kind::SPEECH,
         _ if has(&["sora", "veo"]) => kind::VIDEO,
-        _ if has(&["realtime", "-live", "live-", "native-audio"]) => kind::REALTIME,
         _ if has(&["jev", "clef", "span-02", "decision", "systemone"]) => kind::DECISION,
         _ => kind::CHAT,
     }
@@ -403,12 +416,15 @@ mod tests {
         assert_eq!(kind("gpt-4o-mini"), "chat");
         assert_eq!(kind("gpt-image-1"), "image");
         assert_eq!(kind("imagen-4.0-generate-001"), "image");
+        assert_eq!(kind("gemini-3.1-flash-image"), "image");
+        assert_eq!(kind("nano-banana-pro-preview"), "image");
         assert_eq!(kind("whisper-large-v3"), "transcription");
         assert_eq!(kind("gpt-4o-mini-transcribe"), "transcription");
         assert_eq!(kind("gpt-4o-mini-tts"), "speech");
         assert_eq!(kind("sora-2"), "video");
         assert_eq!(kind("veo-3.0-generate-001"), "video");
         assert_eq!(kind("gpt-realtime"), "realtime");
+        assert_eq!(kind("voxtral-mini-transcribe-realtime-2602"), "realtime");
         assert_eq!(kind("gemini-live-2.5-flash-preview"), "realtime");
         assert_eq!(kind("gemini-2.0-flash-live-001"), "realtime");
         assert_eq!(

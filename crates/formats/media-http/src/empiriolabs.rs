@@ -89,7 +89,8 @@ impl Format<ProviderIo, Output, Input> for EmpirioLabsVideos {
 
 /// An operation EmpirioLabs has no form for, refused.
 fn unsupported(what: &str) -> Fault {
-    Fault::bad_request(format!("EmpirioLabs cannot {what}")).with(ErrorCode("unsupported".into()))
+    Fault::bad_request(format!("EmpirioLabs cannot {what}"))
+        .with(ErrorCode("unsupported".into()))
 }
 
 /// The provider's id of a job `id`, else a 404.
