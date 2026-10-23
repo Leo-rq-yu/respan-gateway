@@ -70,7 +70,9 @@ impl Format<ProviderIo, Output, Input> for OpenAiEmbeddings {
     }
 
     fn bind(&self, io: ProviderIo) -> Result<Connection<Output, Input>, Fault> {
-        Ok(bind_provider(io, NAME, post, |_, _| Some(read_response())))
+        Ok(bind_provider(io, NAME, post, |_, sent| {
+            Some(read_response(sent))
+        }))
     }
 }
 
@@ -160,14 +162,28 @@ fn items_json(items: &[Item]) -> Result<Value, Fault> {
     }
 }
 
-/// The decoder of a provider's answer: one JSON body.
-fn read_response() -> Box<dyn Decoder<Output>> {
-    Box::new(Whole::new(decode_whole))
+/// The decoder of a provider's answer to `sent`: one JSON body, with a
+/// vector for each of its inputs.
+fn read_response(sent: &http::Request<Bytes>) -> Box<dyn Decoder<Output>> {
+    let asked = serde_json::from_slice::<Value>(sent.body())
+        .ok()
+        .and_then(|body| read_items(&body["input"]).ok())
+        .map(|items| items.len());
+    Box::new(Whole::new(move |raw: Bytes, out: &mut Vec<Output>| {
+        decode_whole(raw, asked, out)
+    }))
 }
 
-/// The events of a whole JSON response.
-fn decode_whole(raw: Bytes, out: &mut Vec<Output>) -> Result<(), Fault> {
+/// The events of a whole JSON response, which holds `asked` vectors if
+/// that is known.
+fn decode_whole(raw: Bytes, asked: Option<usize>, out: &mut Vec<Output>) -> Result<(), Fault> {
     let v = whole_json(NAME, raw, |v| v["data"].is_array())?;
+    let held = v["data"].as_array().map_or(0, Vec::len);
+    if let Some(asked) = asked.filter(|asked| *asked != held) {
+        return Err(Fault::upstream(format!(
+            "the provider's {NAME} response holds {held} vectors for {asked} inputs"
+        )));
+    }
     let mut start = Start::new(v["model"].as_str().map(Into::into));
     start.native = native_of(NAME, rest_of(&v, &["object", "data", "model", "usage"]));
     out.push(Output::Start(start));
@@ -353,6 +369,17 @@ mod tests {
     }
 
     #[test]
+    fn an_answer_with_fewer_vectors_than_inputs_is_refused() {
+        let raw = json!({"data": [{"index": 0, "embedding": [1.5]}]});
+        let sent = http::Request::new(Bytes::from(json!({"input": ["a", "b"]}).to_string()));
+        let mut decoder = read_response(&sent);
+        let mut events = Vec::new();
+        let refused = decoder.decode(Bytes::from(raw.to_string()), &mut events);
+        let refused = refused.and_then(|()| decoder.end(Ok(()), &mut events));
+        assert!(refused.is_err_and(|f| f.is(FaultKind::Provider)));
+    }
+
+    #[test]
     fn a_response_is_written_with_its_usage_and_extras() {
         let raw = json!({
             "object": "list",
@@ -362,7 +389,7 @@ mod tests {
             "w": true,
         });
         let mut events = Vec::new();
-        decode_whole(Bytes::from(raw.to_string()), &mut events).expect("events");
+        decode_whole(Bytes::from(raw.to_string()), Some(1), &mut events).expect("events");
         assert!(events.contains(&Output::Usage(Usage::new(3, 0))));
         let written = encode_whole(&events, false).expect("a body");
         let written: Value = serde_json::from_slice(&written).unwrap_or_default();

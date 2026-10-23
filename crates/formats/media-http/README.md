@@ -43,6 +43,8 @@ version, as OpenAI's SDKs take it: `https://api.openai.com/v1`,
 - Usage `{"type": "tokens"}` is `Usage`, `{"type": "duration"}` `Seconds`; a
   usage object's other fields, such as `input_token_details`, stay native.
 - A stream that ends before its end event fails `truncated`.
+- An embeddings answer must hold one vector for each input of the call; a
+  count that differs is a provider fault.
 - A client body without its required field (`prompt`, an edit's `image`,
   `file`, `input`) is refused, 400, before any call. A provider's error is
   read leniently, as compatible servers write it, and a client's is written
