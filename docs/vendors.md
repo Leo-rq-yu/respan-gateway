@@ -62,8 +62,9 @@ Gemini's OpenAI-compatible endpoint
 `https://generativelanguage.googleapis.com/v1beta/openai` (all
 `openai-chat`). Anthropic's does not: `https://api.anthropic.com`. The media
 formats (`openai-images`, `openai-transcriptions`, `openai-speech`,
-`openai-videos`, `openai-embeddings`, `cohere-rerank`) and `openai-responses` take the same
-base URL as `openai-chat`. Gemini's own formats, `gemini-generate`
+`openai-videos`, `openai-embeddings`) and `openai-responses` take the same
+base URL as `openai-chat`; `cohere-rerank` takes the vendor's base URL with its
+version, such as Cohere's `https://api.cohere.com/v2`. Gemini's own formats, `gemini-generate`
 (`generateContent` and `streamGenerateContent`, the model in the path),
 `gemini-images` (its image models' `generateContent`) and `gemini-veo`,
 take `https://generativelanguage.googleapis.com/v1beta` with

@@ -19,7 +19,8 @@ Every `Input` has an optional `model`, read by `model()` and rewritten by
 conversation kind's `Media` (a MIME type, bytes or a URL, a name) and token
 usage its `Usage`; a kind has a type of its own only where neither says it:
 a `Transcript` (`text`, `language`, `duration`, `segments`, `words`), and
-`Seconds` of audio a provider bills, as Whisper does, and `Searches`, the search units a rerank provider bills. Every `Output` also has
+`Seconds` of audio a provider bills, as Whisper does, and `Searches`, the
+search units a rerank provider bills. Every `Output` also has
 `Native`, an event the kind has no form for.
 
 What a kind has no form for stays as the format that decoded it has it, in

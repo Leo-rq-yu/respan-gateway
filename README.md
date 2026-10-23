@@ -39,8 +39,9 @@ requests), with a live log of every call. **[▶ Watch the demo](https://www.you
 
 - **Multimodal**<br>
   Realtime voice across vendors (an OpenAI Realtime client talks to Gemini
-  Live, and back), plus images, speech, transcription, embeddings, rerank and video
-  through OpenAI's, Gemini's or Cohere's APIs, to any vendor that has them.
+  Live, and back), plus images, speech, transcription, embeddings, rerank
+  and video through OpenAI's, Gemini's or Cohere's APIs, to any vendor that
+  has them.
 
 - **MCP tools for every model**<br>
   Put MCP servers or built-in tool vendors behind the gateway, from web search

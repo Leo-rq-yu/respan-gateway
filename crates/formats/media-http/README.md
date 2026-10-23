@@ -6,8 +6,9 @@ over HTTP.
 `openai::{OpenAiImages, OpenAiTranscriptions, OpenAiSpeech, OpenAiVideos,
 OpenAiEmbeddings}`, named `openai-images`, `openai-transcriptions`,
 `openai-speech`, `openai-videos` and `openai-embeddings`: OpenAI's endpoints, as OpenAI and compatible vendors serve
-them. `cohere::CohereRerank`, named `cohere-rerank`: Cohere's `/rerank`,
-as Cohere, Jina, Together and compatible vendors serve it. A client's request is a `POST` to a path ending in the endpoint
+them. `cohere::CohereRerank`, named `cohere-rerank`: Cohere's `/rerank`, as
+Cohere and compatible vendors serve it. A client's request is a `POST` to a
+path ending in the endpoint
 (`/v1/images/generations` and `/openai/v1/images/generations` alike), or a
 video job's by its method and path; a provider's base URL includes the
 version, as OpenAI's SDKs take it: `https://api.openai.com/v1`,

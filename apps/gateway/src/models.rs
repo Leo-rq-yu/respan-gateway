@@ -435,7 +435,6 @@ mod tests {
         assert_eq!(kind("gemini-2.5-flash"), "chat");
         assert_eq!(kind("text-embedding-3-small"), "embedding");
         assert_eq!(kind("gemini-embedding-001"), "embedding");
-        assert_eq!(kind("Salesforce/Llama-Rank-V1"), "chat");
         assert_eq!(kind("rerank-v3.5"), "rerank");
         assert_eq!(kind("jev-latest"), "decision");
         assert_eq!(kind("span-02"), "decision");

@@ -19,13 +19,12 @@ use serde_json::{Map, Value};
 const NAME: &str = "cohere-rerank";
 const RERANK: &str = "/rerank";
 
-/// Cohere Rerank, as Cohere, Jina, Together and compatible vendors serve
-/// it: a `POST` to a path ending in `/rerank`, with a `query` and
+/// Cohere Rerank, as Cohere and compatible vendors serve it: a `POST` to a path ending in `/rerank`, with a `query` and
 /// `documents`, answered with `results` of an `index` and a
 /// `relevance_score`.
 ///
-/// A document is a string, or an object with a `text`, as Jina takes it; it
-/// is relayed as a string. `top_n` and `return_documents` are relayed as
+/// A document is a string, or an object with a `text`, as some vendors take
+/// it; it is relayed as a string. `top_n` and `return_documents` are relayed as
 /// the client wrote them. A result's `document` is a string or an object
 /// with a `text`, and is written as the latter.
 ///
@@ -374,9 +373,9 @@ mod tests {
     }
 
     #[test]
-    fn a_jina_response_gives_documents_and_total_tokens() {
+    fn a_response_with_usage_gives_documents_and_total_tokens() {
         let events = decoded(json!({
-            "model": "jina-reranker-v2",
+            "model": "reranker-v2",
             "usage": {"total_tokens": 31},
             "results": [{"index": 0, "document": {"text": "a"}, "relevance_score": 0.5}],
         }));
