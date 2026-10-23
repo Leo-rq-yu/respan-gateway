@@ -1,17 +1,22 @@
-//! Google Vertex AI: Gemini's `generateContent` and Chat Completions, at a
-//! project's own regional URL, with a Google access token.
+//! Google Vertex AI: Gemini's `generateContent` (chats, images and
+//! transcriptions), Veo and Chat Completions, at a project's own regional
+//! URL, with a Google access token.
+
+use std::borrow::Cow;
 
 use respan_gateway_conversation_http::Schema;
 use respan_gateway_conversation_http::dialect::{Dialect, Dialected};
 use respan_gateway_conversation_http::gemini::GeminiGenerate;
 use respan_gateway_conversation_http::openai::OpenAiChat;
+use respan_gateway_core::Fault;
+use respan_gateway_media::{image, transcription};
 use respan_gateway_media_http::dialect::{Dialect as MediaDialect, Dialected as MediaDialected};
 use respan_gateway_media_http::gemini::{GeminiImages, GeminiTranscriptions, VertexVeo};
 use serde_json::Value;
 
 use respan_gateway_vendor_kit::{
     Body, BoxFuture, KeyIn, Model, Models, Vendor, VendorProvider, built_wrong, http,
-    json as body_json, models,
+    json as body_json, models, transcription as text_only,
 };
 
 /// Where Gemini's own API is: a project and location's Google models. A
@@ -60,7 +65,20 @@ impl Dialect for Vertex {
     }
 }
 
-impl<I, O> MediaDialect<I, O> for Vertex {
+impl MediaDialect<image::Input, image::Output> for Vertex {
+    fn key(&self) -> Option<KeyIn> {
+        Some(KeyIn::Bearer)
+    }
+}
+
+impl MediaDialect<transcription::Input, transcription::Output> for Vertex {
+    fn input<'a>(
+        &self,
+        input: &'a transcription::Input,
+    ) -> Result<Cow<'a, transcription::Input>, Fault> {
+        text_only::text_only(input)
+    }
+
     fn key(&self) -> Option<KeyIn> {
         Some(KeyIn::Bearer)
     }

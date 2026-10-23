@@ -53,8 +53,9 @@ Vendors' fields the kind has no form for (Groq's `x_groq`, Together's
 `steps`) stay native, so a relay in the same format keeps them.
 
 `dialect::{Spec, Dialect, Dialected}`: a format as a vendor speaks it.
-`OpenAiSpeech` and `GeminiImages` are a `Spec`, their provider edge in parts; a vendor's `Dialect` says what it takes and answers beyond the spec
-(its input before the spec writes it, how its answer is read, whether it
+`OpenAiSpeech`, `GeminiImages` and `GeminiTranscriptions` are a `Spec`, their
+provider edge in parts; a vendor's `Dialect` says what it takes and answers
+beyond the spec (its input before the spec writes it, how its answer is read, whether it
 streams, where its key goes), and `Dialected::new(spec, dialect)` is a
 provider format of the spec's name, so a client of the spec is still
 relayed to it.
@@ -140,10 +141,11 @@ the Gemini API's base (`x-goog-api-key`) or Vertex AI's.
   English, and names the `language` and `prompt`; the `temperature` is a
   `generationConfig`'s. Its native fields (`gemini-transcriptions`) go in
   the body.
-- Gemini gives the text alone: of an OpenAI client's native fields only
-  `response_format` `json` and `text` are taken (the client is answered as
-  it asked); `verbose_json`, `srt`, `vtt`, `diarized_json`, timestamp
-  granularities and the rest are refused, 400 `unsupported`, before any call.
+- Audio inline is refused over 20 MB, the most a Gemini request holds
+  (400, before any call). Gemini gives the text alone, so a vendor's dialect
+  takes of an OpenAI client's native fields only `response_format` `json`
+  and `text` and refuses the rest (`verbose_json`, `srt`, `vtt`,
+  `diarized_json`, timestamp granularities), 400 `unsupported`.
 - The answer's text, not its thoughts', is the transcript, and its
   `usageMetadata` is token usage, its per-modality counts (audio tokens
   among them) a native event. An answer with no text and a block or finish

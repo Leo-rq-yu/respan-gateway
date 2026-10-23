@@ -51,6 +51,6 @@ Some providers serve a finished job's content only at the URLs the job
 names (`Job::videos`), as Veo does: `video::LocateContent`, given those
 providers' names and registered after the router, retrieves the job before
 a `Content` request goes on, and sets its `url`. Content not ready is
-refused, 400 `video_not_ready`. A provider that holds the content in the finished
-job (Veo on Vertex AI, as base64) needs no locating: it serves a `Content`
-request by retrieving the job again.
+refused, 400 `video_not_ready`. A provider that holds the content in the
+finished job (Veo on Vertex AI, as base64) needs no locating: it serves a
+`Content` request by retrieving the job again.

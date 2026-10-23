@@ -10,7 +10,7 @@ use base64::engine::general_purpose::STANDARD;
 use respan_gateway_conversation::MediaSource;
 use respan_gateway_conversation_http::fields::{invalid, kept};
 use respan_gateway_conversation_http::gemini::usage_of;
-use respan_gateway_core::{Connection, ErrorCode, Fault, Format, NativeFields, Provider};
+use respan_gateway_core::{Connection, ErrorCode, Fault, Format, Provider};
 use respan_gateway_http::bytes::Bytes;
 use respan_gateway_http::http::header::CONTENT_TYPE;
 use respan_gateway_http::http::{
@@ -22,9 +22,8 @@ use serde_json::{Map, Value, json};
 
 const NAME: &str = "gemini-transcriptions";
 
-/// The format whose native fields a client of the kind's usual request
-/// leaves, which this one reads or refuses ([`check_native`]).
-const OPENAI: &str = "openai-transcriptions";
+/// The most a request holds, audio inline included, as Gemini documents it.
+const INLINE_LIMIT: usize = 20 * 1024 * 1024;
 
 /// Gemini's models as transcribers, as the Gemini API serves them: a `POST`
 /// to `.../models/{model}:generateContent` of one user turn, the audio as
@@ -33,10 +32,9 @@ const OPENAI: &str = "openai-transcriptions";
 ///
 /// The instruction asks for the words spoken, or, for a translation, their
 /// English; the `language` and `prompt` go into it, and the `temperature`
-/// into `generationConfig`. A plain transcript is all Gemini gives, so
-/// `verbose_json`, `srt` and `vtt` and timestamp granularities are refused,
-/// 400, before any call; `json` and `text` are the same transcript, written
-/// as the client asks. The native fields of this format go in the body,
+/// into `generationConfig`. Audio over 20 MB, the most a request
+/// holds, is refused, 400, before any call. The native fields of this format
+/// go in the body,
 /// `generationConfig` merged with what it says. An answer's text, but not
 /// its thoughts', is the transcript, its usage `usageMetadata`'s tokens,
 /// with the per-modality counts (audio tokens among them) kept as a native
@@ -123,8 +121,11 @@ fn call(head: &mut RequestHead, input: &Input) -> Result<Box<dyn Encoder<Input>>
 
 /// A call's body: its turn, its `generationConfig`, and its native fields.
 fn body_of(input: &Input) -> Result<Map<String, Value>, Fault> {
-    let mut native = check_native(&input.native)?;
+    let mut native = kept(NAME, &input.native)?;
     let audio = match &input.audio.source {
+        MediaSource::Bytes(bytes) if bytes.len().div_ceil(3) * 4 > INLINE_LIMIT => {
+            return Err(invalid("file", "is over the 20 MB Gemini takes inline"));
+        }
         MediaSource::Bytes(bytes) => json!({
             "inlineData": { "mimeType": input.audio.mime_type, "data": STANDARD.encode(bytes) },
         }),
@@ -171,30 +172,6 @@ fn instruction_of(input: &Input) -> String {
     text
 }
 
-/// The native fields to write in the body: this format's own, and of
-/// `openai-transcriptions` the `response_format` Gemini can give (`json` and
-/// `text`, one transcript); another is refused, as Gemini gives no timings,
-/// speakers or log probabilities.
-fn check_native(native: &Option<NativeFields>) -> Result<Map<String, Value>, Fault> {
-    let Some(fields) = native.as_ref().filter(|n| &*n.format == OPENAI) else {
-        return kept(NAME, native);
-    };
-    for (key, value) in &fields.fields {
-        let taken = match key.as_str() {
-            "response_format" => matches!(value.as_str(), Some("json" | "text")),
-            "timestamp_granularities" | "timestamp_granularities[]" => {
-                value.as_array().is_some_and(Vec::is_empty)
-            }
-            _ => false,
-        };
-        if !taken {
-            let what = "is not one Gemini transcribes with: it gives the text alone";
-            return Err(invalid(key, what).with(ErrorCode("unsupported".into())));
-        }
-    }
-    Ok(Map::new())
-}
-
 /// The events of an answer: its transcript, then its usage. One with no
 /// text and a reason is refused, saying why.
 fn read_response(raw: Bytes, out: &mut Vec<Output>) -> Result<(), Fault> {
@@ -235,6 +212,7 @@ mod tests {
     use super::*;
     use respan_gateway_conversation::Media;
     use respan_gateway_conversation_http::fields::native_of;
+    use respan_gateway_core::NativeFields;
 
     fn input() -> Input {
         let mut input = Input::new(Media::new(
@@ -319,26 +297,15 @@ mod tests {
     }
 
     #[test]
-    fn json_and_text_are_taken_but_timings_are_refused() {
-        for format in ["json", "text"] {
-            let mut i = input();
-            i.native = native(OPENAI, json!({"response_format": format}));
-            assert!(sent(&i).is_ok(), "{format}");
-        }
-        for fields in [
-            json!({"response_format": "verbose_json"}),
-            json!({"response_format": "srt"}),
-            json!({"response_format": "vtt"}),
-            json!({"response_format": "diarized_json"}),
-            json!({"timestamp_granularities": ["word"]}),
-            json!({"include": ["logprobs"]}),
-        ] {
-            let mut i = input();
-            i.native = native(OPENAI, fields.clone());
-            assert!(sent(&i).is_err(), "{fields}");
-        }
+    fn another_formats_fields_and_oversized_audio_are_refused() {
         let mut i = input();
-        i.native = native("anthropic-messages", json!({"x": 1}));
+        i.native = native("openai-transcriptions", json!({"response_format": "json"}));
+        assert!(sent(&i).is_err());
+        let mut i = input();
+        i.audio = Media::new(
+            "audio/wav",
+            MediaSource::Bytes(vec![0; 16 * 1024 * 1024].into()),
+        );
         assert!(sent(&i).is_err());
     }
 

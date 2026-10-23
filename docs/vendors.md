@@ -89,10 +89,10 @@ key. The `global` location has no region in its host
 (`https://aiplatform.googleapis.com/v1/projects/..`), so give it as the
 `base_url`. Express mode's API keys are not taken: the key is sent only as a
 bearer token. `gemini-images` draws with Gemini's image models through
-`generateContent`; Imagen's `:predict` is not spoken. `gemini-transcriptions` asks a Gemini
-model for the text of audio, and so gives the text alone. `vertex-veo` polls its
-operation with a `POST` and serves the video's bytes from the finished
-operation, so a `storageUri` is refused.
+`generateContent`; Imagen's `:predict` is not spoken. `gemini-transcriptions`
+asks a Gemini model for the text of audio, and so gives the text alone.
+`vertex-veo` polls its operation with a `POST` and serves the video's bytes
+from the finished operation, so a `storageUri` is refused.
 
 Respan's formats sit under one API, `https://api.respan.ai/api`:
 `openai-chat` and `openai-responses` at it, `anthropic-messages` at
