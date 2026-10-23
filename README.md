@@ -39,8 +39,8 @@ requests), with a live log of every call. **[▶ Watch the demo](https://www.you
 
 - **Multimodal**<br>
   Realtime voice across vendors (an OpenAI Realtime client talks to Gemini
-  Live, and back), plus images, speech, transcription, embeddings and video
-  through OpenAI's or Gemini's APIs, to any vendor that has them.
+  Live, and back), plus images, speech, transcription, embeddings, rerank and video
+  through OpenAI's, Gemini's or Cohere's APIs, to any vendor that has them.
 
 - **MCP tools for every model**<br>
   Put MCP servers or built-in tool vendors behind the gateway, from web search
@@ -176,6 +176,7 @@ the right, translating between them.
 | **Images** | OpenAI Images<br>Gemini Images | <picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/vendors/openai-dark.svg"><img src="docs/assets/vendors/openai.svg" alt="OpenAI" title="OpenAI" width="20" height="20"></picture> <img src="docs/assets/vendors/gemini.svg" alt="Gemini" title="Gemini" width="20" height="20"> <picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/vendors/xai-dark.svg"><img src="docs/assets/vendors/xai.svg" alt="xAI" title="xAI" width="20" height="20"></picture> <img src="docs/assets/vendors/together.svg" alt="Together" title="Together" width="20" height="20"> |
 | **Speech, transcription** | OpenAI Speech<br>OpenAI Transcriptions | <picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/vendors/openai-dark.svg"><img src="docs/assets/vendors/openai.svg" alt="OpenAI" title="OpenAI" width="20" height="20"></picture> <picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/vendors/groq-dark.svg"><img src="docs/assets/vendors/groq.svg" alt="Groq" title="Groq" width="20" height="20"></picture> |
 | **Embeddings** | OpenAI Embeddings | <picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/vendors/openai-dark.svg"><img src="docs/assets/vendors/openai.svg" alt="OpenAI" title="OpenAI" width="20" height="20"></picture> <img src="docs/assets/vendors/gemini.svg" alt="Gemini" title="Gemini" width="20" height="20"> <img src="docs/assets/vendors/mistral.svg" alt="Mistral" title="Mistral" width="20" height="20"> <img src="docs/assets/vendors/together.svg" alt="Together" title="Together" width="20" height="20"> <img src="docs/assets/vendors/fireworks.svg" alt="Fireworks" title="Fireworks" width="20" height="20"> <img src="docs/assets/vendors/cloudflare.svg" alt="Cloudflare" title="Cloudflare" width="20" height="20"> <picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/vendors/ollama-dark.svg"><img src="docs/assets/vendors/ollama.svg" alt="Ollama" title="Ollama" width="20" height="20"></picture> |
+| **Rerank** | Cohere Rerank | <img src="docs/assets/vendors/together.svg" alt="Together" title="Together" width="20" height="20"> |
 | **Video** | OpenAI Videos<br>Gemini Veo | <img src="docs/assets/vendors/veo.svg" alt="Google Veo" title="Google Veo" width="20" height="20"> Google Veo |
 | **Decisions** | Respan Decisions<br>TypeSafe System One | <picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/vendors/respan-dark.svg"><img src="docs/assets/vendors/respan.svg" alt="Respan" title="Respan" width="20" height="20"></picture> <img src="docs/assets/vendors/typesafe.png" alt="TypeSafe" title="TypeSafe" width="20" height="20"> |
 | **Tools** | MCP | <picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/vendors/mcp-dark.svg"><img src="docs/assets/vendors/mcp.svg" alt="MCP" title="MCP" width="20" height="20"></picture> your MCP servers and tool vendors |
