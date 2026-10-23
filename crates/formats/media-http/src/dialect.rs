@@ -16,6 +16,7 @@ use respan_gateway_http::bytes::Bytes;
 use respan_gateway_http::http::{
     self, request::Parts as RequestHead, response::Parts as ResponseHead,
 };
+use respan_gateway_http::path::set_path;
 use respan_gateway_http::{Connect, Decoder, Encoder, KeyIn, ProviderIo, Reach, Upstream};
 
 use crate::edge::bind_provider;
@@ -66,8 +67,8 @@ pub(crate) fn bind<S: Spec>(spec: S, io: ProviderIo) -> Connection<S::Output, S:
 }
 
 /// How a vendor departs from a media spec it speaks, of input `I` and
-/// output `O`: what it takes, before the spec writes it, how its answer is
-/// read, and whether it streams. What it does not say is
+/// output `O`: what it takes, before the spec writes it, where it is
+/// served, how its answer is read, and whether it streams. What it does not say is
 /// the spec's.
 pub trait Dialect<I, O>: Clone + Send + Sync + 'static {
     /// The input as the vendor takes it, before the spec writes it: `input`
@@ -92,6 +93,13 @@ pub trait Dialect<I, O>: Clone + Send + Sync + 'static {
     /// ask: as the spec would, unless it streams otherwise or not at all.
     fn streams(&self, asked: bool) -> bool {
         asked
+    }
+
+    /// Where the vendor serves the call, relative to its base URL, if not
+    /// where the spec does: the path the spec writes, whichever of its
+    /// endpoints it is, is replaced by this.
+    fn path(&self) -> Option<&'static str> {
+        None
     }
 
     /// Where the vendor takes its key, if not where the spec does.
@@ -162,6 +170,9 @@ where
             S::NAME,
             move |head, input| {
                 let encoder = spec.post(head, &*writes.input(input)?, stream)?;
+                if let Some(path) = writes.path() {
+                    set_path(head, path)?;
+                }
                 Ok(Box::new(Written {
                     encoder,
                     dialect: writes,
