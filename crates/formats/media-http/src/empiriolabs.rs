@@ -1,4 +1,4 @@
-//! EmpirioLabs' video API over HTTP: a provider format of the
+//! EmpirioLabs AI's video API over HTTP: a provider format of the
 //! [`video`](respan_gateway_media::video) kind, [`EmpirioLabsVideos`]. A
 //! provider's base URL includes the version, `https://api.empiriolabs.ai/v1`.
 
@@ -18,10 +18,10 @@ use serde_json::{Map, Value};
 use respan_gateway_media::video::{Create, Input, Job, JobError, Output, Status, Variant};
 
 const NAME: &str = "empiriolabs-videos";
-/// What starts the id of a job of EmpirioLabs'.
+/// What starts the id of a job of EmpirioLabs AI's.
 const PREFIX: &str = "empiriolabs_";
 
-/// EmpirioLabs' video API: a provider of the video kind.
+/// EmpirioLabs AI's video API: a provider of the video kind.
 ///
 /// A creation is `POST /videos/generations`, which answers a job at once; a
 /// job is polled at `GET /jobs/{id}`, an endpoint shared with its other
@@ -37,7 +37,7 @@ const PREFIX: &str = "empiriolabs_";
 ///
 /// A video is served at a URL of the provider's storage, which the
 /// provider's key is never sent to: its content is refused, 400, naming
-/// that it is at the URL its job names. EmpirioLabs cannot remix, delete or
+/// that it is at the URL its job names. EmpirioLabs AI cannot remix, delete or
 /// list videos, nor make a thumbnail or a spritesheet: those are refused,
 /// 400, before any call. What it answers beyond the kind is dropped.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -87,16 +87,16 @@ impl Format<ProviderIo, Output, Input> for EmpirioLabsVideos {
     }
 }
 
-/// An operation EmpirioLabs has no form for, refused.
+/// An operation EmpirioLabs AI has no form for, refused.
 fn unsupported(what: &str) -> Fault {
-    Fault::bad_request(format!("EmpirioLabs cannot {what}"))
+    Fault::bad_request(format!("EmpirioLabs AI cannot {what}"))
         .with(ErrorCode("unsupported".into()))
 }
 
 /// The provider's id of a job `id`, else a 404.
 fn provider_id(id: &str) -> Result<&str, Fault> {
     EmpirioLabsVideos::provider_id(id)
-        .ok_or_else(|| Fault::not_found(format!("no EmpirioLabs video has id {id}")))
+        .ok_or_else(|| Fault::not_found(format!("no EmpirioLabs AI video has id {id}")))
 }
 
 /// The call of `input`: its method and path, and its body's encoder.

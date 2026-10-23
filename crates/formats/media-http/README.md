@@ -60,7 +60,7 @@ streams, where its key goes), and `Dialected::new(spec, dialect)` is a
 provider format of the spec's name, so a client of the spec is still
 relayed to it.
 
-`empiriolabs::EmpirioLabsVideos`, named `empiriolabs-videos`: EmpirioLabs' video
+`empiriolabs::EmpirioLabsVideos`, named `empiriolabs-videos`: EmpirioLabs AI's video
 API, to providers only, at `https://api.empiriolabs.ai/v1` with a bearer key.
 
 - A `Create` is `POST /videos/generations`: its `seconds` `duration`, its
@@ -68,7 +68,7 @@ API, to providers only, at `https://api.empiriolabs.ai/v1` with a bearer key.
   `resolution` (its short side, such as `720p`), its reference image
   `image` (a URL, or a data URL of its bytes), and its `empiriolabs-videos`
   native fields as they are, a field the kind has a place for winning.
-- A job is polled at `GET /jobs/{id}`, an endpoint EmpirioLabs shares with
+- A job is polled at `GET /jobs/{id}`, an endpoint EmpirioLabs AI shares with
   its other asynchronous kinds; its id is `empiriolabs_` and the provider's,
   as a path segment holds it; another id is not found, 404. `processing` is
   `in_progress`; `completed` with a video is `completed`, its videos' URLs
@@ -77,9 +77,9 @@ API, to providers only, at `https://api.empiriolabs.ai/v1` with a bearer key.
 - Content is refused, 400 `unsupported`, before any call: a video is at the
   URL its job names, on the provider's storage, which this format's calls,
   all beside the base URL, do not reach and the key must not.
-- EmpirioLabs cannot remix, delete or list videos, nor make a thumbnail or
+- EmpirioLabs AI cannot remix, delete or list videos, nor make a thumbnail or
   spritesheet: those are refused, 400 `unsupported`, before any call.
-- What EmpirioLabs answers beyond the kind is dropped rather than kept
+- What EmpirioLabs AI answers beyond the kind is dropped rather than kept
   native.
 
 `gemini::GeminiImages`, named `gemini-images`: Gemini's image models,

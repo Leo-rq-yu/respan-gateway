@@ -5,7 +5,7 @@
 //!   serve them, one format per kind.
 //! - [`gemini`]: Google's Veo and image models, as the Gemini API serves
 //!   them, of the video and image kinds.
-//! - [`empiriolabs`]: EmpirioLabs' video API, a provider of the video
+//! - [`empiriolabs`]: EmpirioLabs AI's video API, a provider of the video
 //!   kind.
 //! - [`dialect`]: a format as a vendor speaks it, its departures from the
 //!   spec in the vendor's [`Dialect`](dialect::Dialect).
