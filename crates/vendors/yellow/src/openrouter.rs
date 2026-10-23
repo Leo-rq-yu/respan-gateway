@@ -1,5 +1,5 @@
-//! OpenRouter: Chat Completions, embeddings, transcriptions, speech and
-//! images, for many vendors' models; speech and images in its dialect.
+//! OpenRouter: Chat Completions, embeddings, transcriptions, speech,
+//! images and videos, for many vendors' models; speech and images in its dialect.
 
 use std::borrow::Cow;
 use std::collections::HashMap;
@@ -22,6 +22,7 @@ use respan_gateway_media_http::dialect::Dialected as MediaDialected;
 use respan_gateway_media_http::openai::{
     OpenAiEmbeddings, OpenAiImages, OpenAiSpeech, OpenAiTranscriptions,
 };
+use respan_gateway_media_http::openrouter::OpenRouterVideos;
 use serde_json::{Map, Value, json};
 
 use respan_gateway_vendor_kit::{
@@ -44,6 +45,11 @@ pub const VENDOR: Vendor = Vendor {
             &MediaDialected::new(OpenAiSpeech, OpenRouterSpeech),
             Some(BASE_URL),
         ),
+        (
+            &MediaDialected::new(OpenAiImages, OpenRouterImages),
+            Some(BASE_URL),
+        ),
+        (&OpenRouterVideos, Some(BASE_URL)),
     ],
     models: list_models,
     ..Vendor::DEFAULT
@@ -227,6 +233,21 @@ fn listed_with_kinds(answer: &Value) -> Vec<Model> {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn it_speaks_every_media_format_it_serves() {
+        let names = [
+            "openai-chat",
+            "openai-embeddings",
+            "openai-transcriptions",
+            "openai-speech",
+            "openai-images",
+            "openrouter-videos",
+        ];
+        for name in names {
+            assert!(VENDOR.format(name).is_some(), "{name}");
+        }
+    }
 
     #[test]
     fn a_models_outputs_say_its_kind() {
