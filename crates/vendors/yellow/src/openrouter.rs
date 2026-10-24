@@ -27,6 +27,7 @@ use serde_json::{Map, Value, json};
 
 use respan_gateway_vendor_kit::{
     Body, BoxFuture, Model, Models, Vendor, VendorProvider, built_wrong, chat, http, json, models,
+    time,
 };
 
 /// Where its API is.
@@ -185,48 +186,75 @@ fn images(raw: Bytes, out: &mut Vec<image::Output>) -> Result<(), Fault> {
     Ok(())
 }
 
-/// The kind of call that serves a model, from its `output_modalities`: a
-/// model that outputs text chats, whatever else it outputs; else the kind
-/// of its first output. An output no format serves, such as `rerank`,
-/// names itself.
-fn kind_of(output: &[&str]) -> String {
-    if output.contains(&"text") {
-        return "chat".to_owned();
-    }
-    match output.first() {
-        Some(&"embeddings") => "embedding",
-        Some(&"decisions") => "decision",
-        Some(other) => other,
-        None => "chat",
-    }
-    .to_owned()
-}
+/// The kind each of its outputs says a model is, the first it has: one
+/// that writes text chats, whatever else it writes.
+const KINDS: &[(&str, &str)] = &[
+    ("text", "chat"),
+    ("image", "image"),
+    ("embeddings", "embedding"),
+    ("speech", "speech"),
+    ("transcription", "transcription"),
+    ("video", "video"),
+    ("decisions", "decision"),
+];
 
-/// Its models: `GET /models?output_modalities=all`, which lists those that
-/// output more than text, each of the kind its outputs say.
+/// The kinds whose `prompt` and `completion` prices are not by the token: a
+/// speech model's are by the character or the second, a transcription
+/// model's by the second for some and the token for others, unsaid which;
+/// an image model's are `0` beside its own prices by the image, and a video
+/// model's `0` alone.
+const UNPRICED: &[&str] = &["image", "speech", "transcription", "video"];
+
+/// Its models: `GET /models?output_modalities=all`, every model of every
+/// output, each with what OpenAI-compatible lists add.
 fn list_models(p: &VendorProvider) -> BoxFuture<'_, Models> {
     Box::pin(async move {
         let call = http::Request::get("/models?output_modalities=all").body(Body::default());
         let (answer, _) = p.client()?.send(call.map_err(built_wrong)?).await?;
-        Ok(listed_with_kinds(&json(answer).await?))
+        Ok(listed(&json(answer).await?))
     })
 }
 
-/// The models of `answer`, each of the kind its outputs say.
-fn listed_with_kinds(answer: &Value) -> Vec<Model> {
-    let cards = answer["data"].as_array().into_iter().flatten();
-    let kinds: HashMap<&str, String> = cards
-        .filter_map(|m| {
-            let output = m["architecture"]["output_modalities"].as_array()?;
-            let output: Vec<&str> = output.iter().filter_map(Value::as_str).collect();
-            Some((m["id"].as_str()?, kind_of(&output)))
-        })
+/// The models of its list, each of the kind its outputs say; one whose
+/// outputs say none of [`KINDS`], as a reranker, is none it serves, and is
+/// left out.
+fn listed(answer: &Value) -> Vec<Model> {
+    let entries = answer["data"].as_array().into_iter().flatten();
+    let by_id: HashMap<&str, &Value> = entries
+        .filter_map(|m| Some((m["id"].as_str()?, m)))
         .collect();
     let mut listed = models::listed(answer);
-    for model in &mut listed {
-        model.kind = kinds.get(model.id.as_str()).cloned();
-    }
+    listed.retain_mut(|model| {
+        let Some(m) = by_id.get(model.id.as_str()) else {
+            return false;
+        };
+        described(model, m)
+    });
     listed
+}
+
+/// What its entry `m` adds to `model`: its kind, its maker, the first part
+/// of its id (an alias's after its `~`), and when it expires; a limit of
+/// `0`, as a video model's, is none. `false` if it is of no kind it serves.
+fn described(model: &mut Model, m: &Value) -> bool {
+    let outputs = m["architecture"]["output_modalities"].as_array();
+    let writes = |output: &str| outputs.is_some_and(|o| o.iter().any(|w| w == output));
+    let Some((_, kind)) = KINDS.iter().find(|(output, _)| writes(output)) else {
+        return false;
+    };
+    model.kind = Some((*kind).to_owned());
+    model.maker = model
+        .id
+        .trim_start_matches('~')
+        .split_once('/')
+        .map(|(maker, _)| maker.to_owned());
+    model.retires_at = m["expiration_date"].as_str().and_then(time);
+    model.context_window = model.context_window.filter(|n| *n > 0);
+    model.max_output_tokens = model.max_output_tokens.filter(|n| *n > 0);
+    if UNPRICED.contains(kind) {
+        model.price = None;
+    }
+    true
 }
 
 #[cfg(test)]
@@ -250,39 +278,60 @@ mod tests {
     }
 
     #[test]
-    fn a_models_outputs_say_its_kind() {
-        let card = |id: &str, out: Value| json!({ "id": id, "architecture": { "output_modalities": out } });
+    fn a_models_outputs_say_its_kind_and_a_reranker_is_left_out() {
+        let card = |id: &str, out: Value, prompt: &str| {
+            json!({ "id": id, "context_length": 0, "expiration_date": null,
+                    "architecture": { "output_modalities": out },
+                    "top_provider": { "max_completion_tokens": 0 },
+                    "pricing": { "prompt": prompt, "completion": "0" } })
+        };
         let answer = json!({ "data": [
-            card("a/chat", json!(["text"])),
-            card("a/nano", json!(["image", "text"])),
-            card("a/draw", json!(["image"])),
-            card("a/embed", json!(["embeddings"])),
-            card("a/tts", json!(["speech"])),
-            card("a/stt", json!(["transcription"])),
-            card("a/clip", json!(["video"])),
-            card("a/rank", json!(["rerank"])),
-            card("a/decide", json!(["decisions"])),
+            card("openai/gpt-x", json!(["text"]), "0.000001"),
+            card("google/nano-banana", json!(["image", "text"]), "0.000001"),
+            card("black-forest-labs/flux", json!(["image"]), "0"),
+            card("nvidia/embed", json!(["embeddings"]), "0.00000001"),
+            card("hexgrad/kokoro", json!(["speech"]), "0.00000062"),
+            card("openai/whisper", json!(["transcription"]), "0.00000333"),
+            card("x-ai/grok-video", json!(["video"]), "0"),
+            card("voyageai/rerank", json!(["rerank"]), "0"),
+            card("~typesafe/jev-latest", json!(["decisions"]), "0"),
             json!({ "id": "a/bare" }),
         ] });
-        let kinds: Vec<_> = listed_with_kinds(&answer)
-            .into_iter()
-            .map(|m| m.kind.unwrap_or_default())
-            .collect();
+        let models = listed(&answer);
+        let kinds: Vec<_> = models.iter().map(|m| m.kind.as_deref()).collect();
         assert_eq!(
             kinds,
             [
-                "chat",
-                "chat",
-                "image",
-                "embedding",
-                "speech",
-                "transcription",
-                "video",
-                "rerank",
-                "decision",
-                ""
-            ]
+                Some("chat"),
+                Some("chat"),
+                Some("image"),
+                Some("embedding"),
+                Some("speech"),
+                Some("transcription"),
+                Some("video"),
+                Some("decision"),
+            ],
+            "a reranker, or a model of no outputs, is none it serves"
         );
+        let makers: Vec<_> = models.iter().map(|m| m.maker.as_deref()).collect();
+        assert_eq!(makers[0], Some("openai"));
+        assert_eq!(makers[7], Some("typesafe"), "an alias's maker");
+        assert_eq!(models[0].price.map(|p| p.input), Some(1.0));
+        assert_eq!(models[3].price.map(|p| p.input), Some(0.01));
+        let priced: Vec<_> = models.iter().map(|m| m.price.is_some()).collect();
+        assert_eq!(priced, [true, true, false, true, false, false, false, true]);
+        assert_eq!(
+            (models[6].context_window, models[6].max_output_tokens),
+            (None, None)
+        );
+    }
+
+    #[test]
+    fn a_models_expiry_is_when_it_retires() {
+        let answer = json!({ "data": [{ "id": "poolside/laguna", "expiration_date": "2026-10-31",
+            "architecture": { "output_modalities": ["text"] } }] });
+        let retires = listed(&answer)[0].retires_at.map(|t| t.timestamp());
+        assert_eq!(retires, Some(1_793_404_800));
     }
 
     fn decode(body: &str) -> Vec<image::Output> {
