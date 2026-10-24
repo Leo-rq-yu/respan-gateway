@@ -1,5 +1,5 @@
 //! Google Vertex AI: at a project and location, Gemini's `generateContent`
-//! (chats, images and transcriptions), Veo, Claude in Anthropic's Messages,
+//! (chats, images, speech and transcriptions), Veo, Claude in Anthropic's Messages,
 //! and the other models of its Model Garden in Chat Completions; Gemini's
 //! embeddings in OpenAI's; with a Google access token. And its express mode
 //! ([`EXPRESS`]): Gemini's `generateContent`, for chats and images, with an
@@ -15,9 +15,11 @@ use respan_gateway_conversation_http::gemini::GeminiGenerate;
 use respan_gateway_conversation_http::openai::OpenAiChat;
 use respan_gateway_core::Fault;
 use respan_gateway_core::futures::future::join_all;
-use respan_gateway_media::{embedding, image, transcription};
+use respan_gateway_media::{embedding, image, speech, transcription};
 use respan_gateway_media_http::dialect::{Dialect as MediaDialect, Dialected as MediaDialected};
-use respan_gateway_media_http::gemini::{GeminiImages, GeminiTranscriptions, VertexVeo};
+use respan_gateway_media_http::gemini::{
+    GeminiImages, GeminiSpeech, GeminiTranscriptions, VertexVeo,
+};
 use respan_gateway_media_http::openai::OpenAiEmbeddings;
 use serde_json::{Map, Value};
 
@@ -86,6 +88,7 @@ pub const VENDOR: Vendor = Vendor {
             &MediaDialected::new(GeminiTranscriptions, Vertex),
             Some(API),
         ),
+        (&MediaDialected::new(GeminiSpeech, Vertex), Some(API)),
         (&VertexVeo, Some(API)),
         (&Dialected::new(AnthropicMessages, Claude), Some(ANTHROPIC)),
         (&Dialected::new(OpenAiChat, OpenApi), Some(LOCATION)),
@@ -165,6 +168,12 @@ impl Dialect for Vertex {
 }
 
 impl MediaDialect<image::Input, image::Output> for Vertex {
+    fn key(&self) -> Option<KeyIn> {
+        Some(KeyIn::Bearer)
+    }
+}
+
+impl MediaDialect<speech::Input, speech::Output> for Vertex {
     fn key(&self) -> Option<KeyIn> {
         Some(KeyIn::Bearer)
     }
@@ -428,7 +437,7 @@ mod tests {
     fn its_key_is_a_bearer_token() {
         let formats = VENDOR.formats.iter().map(|(f, _)| (f.name(), f.key()));
         assert!(formats.clone().all(|(_, key)| key == KeyIn::Bearer));
-        assert_eq!(formats.count(), 7);
+        assert_eq!(formats.count(), 8);
     }
 
     #[test]

@@ -1,6 +1,6 @@
 //! Google's Gemini API: Chat Completions and embeddings at its
 //! OpenAI-compatible base, and its own API beside it: `generateContent`,
-//! for chats, images and transcriptions, Gemini Live and Veo.
+//! for chats, images, speech and transcriptions, Gemini Live and Veo.
 
 use std::borrow::Cow;
 
@@ -14,7 +14,9 @@ use respan_gateway_conversation_http::gemini::{GeminiGenerate, needs_signatures}
 use respan_gateway_conversation_http::openai::OpenAiChat;
 use respan_gateway_media::transcription;
 use respan_gateway_media_http::dialect::{Dialect as MediaDialect, Dialected as MediaDialected};
-use respan_gateway_media_http::gemini::{GeminiImages, GeminiTranscriptions, GeminiVeo};
+use respan_gateway_media_http::gemini::{
+    GeminiImages, GeminiSpeech, GeminiTranscriptions, GeminiVeo,
+};
 use respan_gateway_media_http::openai::OpenAiEmbeddings;
 use respan_gateway_realtime_ws::GeminiLive;
 
@@ -49,6 +51,7 @@ pub const VENDOR: Vendor = Vendor {
             &MediaDialected::new(GeminiTranscriptions, Gemini),
             Some(API),
         ),
+        (&GeminiSpeech, Some(API)),
         (&GeminiVeo, Some(API)),
         (&OpenAiEmbeddings, Some(OPENAI_API)),
     ],

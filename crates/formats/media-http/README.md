@@ -53,8 +53,8 @@ Vendors' fields the kind has no form for (Groq's `x_groq`, Together's
 `steps`) stay native, so a relay in the same format keeps them.
 
 `dialect::{Spec, Dialect, Dialected}`: a format as a vendor speaks it.
-`OpenAiSpeech`, `OpenAiEmbeddings`, `GeminiImages` and `GeminiTranscriptions`
-are each a `Spec`, its provider edge in parts; a vendor's `Dialect` says what
+`OpenAiSpeech`, `OpenAiEmbeddings`, `GeminiImages`, `GeminiSpeech` and
+`GeminiTranscriptions` are each a `Spec`, its provider edge in parts; a vendor's `Dialect` says what
 it takes and answers beyond the spec
 (its input before the spec writes it, how its answer is read, whether it
 streams, where its key goes), and `Dialected::new(spec, dialect)` is a
@@ -147,10 +147,25 @@ the Gemini API's base (`x-goog-api-key`) or Vertex AI's.
   takes of an OpenAI client's native fields only `response_format` `json`
   and `text` and refuses the rest (`verbose_json`, `srt`, `vtt`,
   `diarized_json`, timestamp granularities), 400 `unsupported`.
-- The answer's text, not its thoughts', is the transcript, and its
-  `usageMetadata` is token usage, its per-modality counts (audio tokens
-  among them) a native event. An answer with no text and a block or finish
-  reason is 400 `no_transcript`.
+- The answer's text, not its thoughts', is the transcript, as is a
+  transcribing model's `audioTranscription` part
+  (`gemini-3.5-transcribe`'s), and its `usageMetadata` is token usage. An
+  answer with no text and a block or finish reason is 400 `no_transcript`.
+
+`gemini::GeminiSpeech`, named `gemini-speech`: Gemini's speech models
+(`gemini-3.8-flash-tts`) through `generateContent`, to providers only, at
+the Gemini API's base (`x-goog-api-key`) or Vertex AI's.
+
+- A call is `POST /models/{model}:generateContent`, one user turn of the
+  text, `{instructions}: {text}` if it has instructions, asking for audio
+  (`responseModalities: ["AUDIO"]`) in the voice named, a
+  `speechConfig`'s `prebuiltVoiceConfig.voiceName`, such as `Kore`. Its
+  native fields (`gemini-speech`) go in the body.
+- It speaks a WAV of 16-bit mono PCM at the rate it says (24 kHz), a
+  header put before samples it answers bare (`audio/L16`). Another
+  `response_format`, or none (OpenAI's `mp3`), and a `speed` are refused,
+  400 `unsupported`, before any call; an answer with no audio is 400
+  `no_audio`.
 
 `gemini::VertexVeo`, named `vertex-veo`: Veo as Vertex AI serves it, to
 providers only, at
