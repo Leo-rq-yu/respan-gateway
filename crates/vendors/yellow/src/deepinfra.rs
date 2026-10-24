@@ -1,7 +1,11 @@
-//! DeepInfra: Chat Completions, images and embeddings, as OpenAI serves them.
+//! DeepInfra: Chat Completions, images, embeddings, speech and
+//! transcriptions, as OpenAI serves them. Not its videos: a finished job
+//! says `succeeded`, not `completed`, beside a `data` list of its files.
 
 use respan_gateway_conversation_http::openai::OpenAiChat;
-use respan_gateway_media_http::openai::{OpenAiEmbeddings, OpenAiImages};
+use respan_gateway_media_http::openai::{
+    OpenAiEmbeddings, OpenAiImages, OpenAiSpeech, OpenAiTranscriptions,
+};
 
 use serde_json::Value;
 
@@ -20,6 +24,8 @@ pub const VENDOR: Vendor = Vendor {
         (&OpenAiChat, Some(BASE_URL)),
         (&OpenAiImages, Some(BASE_URL)),
         (&OpenAiEmbeddings, Some(BASE_URL)),
+        (&OpenAiSpeech, Some(BASE_URL)),
+        (&OpenAiTranscriptions, Some(BASE_URL)),
     ],
     models: list_models,
     ..Vendor::DEFAULT
