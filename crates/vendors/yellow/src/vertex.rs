@@ -357,8 +357,8 @@ fn list_models(p: &VendorProvider) -> BoxFuture<'_, Models> {
 
 /// The models of `publisher`'s list that a call reaches: none that must
 /// be deployed first (`deploy`), and only those Vertex gives a resource
-/// or access to; of Google's, none of its open checkpoints, which are
-/// notebooks.
+/// or access to; of Google's, only those with a resource, and none of its
+/// open checkpoints, which are notebooks.
 fn listed(answer: &Value, publisher: &str, maker: &str) -> Vec<Model> {
     let prefix = format!("publishers/{publisher}/models/");
     let models = answer["publisherModels"].as_array().into_iter().flatten();
@@ -366,9 +366,12 @@ fn listed(answer: &Value, publisher: &str, maker: &str) -> Vec<Model> {
         let actions = m["supportedActions"].as_object();
         let can = |action: &str| actions.is_some_and(|a| a.contains_key(action));
         let open = m["openSourceCategory"].as_str().unwrap_or_default();
+        let resource = m.get("publisherModelTemplate").is_some();
         let served = !can("deploy")
-            && (m.get("publisherModelTemplate").is_some() || can("requestAccess"))
-            && (publisher != "google" || !open.contains("OSS"));
+            && match publisher {
+                "google" => resource && !open.contains("OSS"),
+                _ => resource || can("requestAccess"),
+            };
         let name = m["name"].as_str().filter(|_| served)?;
         let id = name.strip_prefix(prefix.as_str()).unwrap_or(name);
         let mut model = Model::new(match publisher {
@@ -538,6 +541,9 @@ mod tests {
              "supportedActions": {"deploy": {}, "multiDeployVertex": {}}},
             {"name": "publishers/google/models/occupancy-analytics",
              "supportedActions": {"createApplication": {}}},
+            {"name": "publishers/google/models/weather-next-v2",
+             "openSourceCategory": "PROPRIETARY",
+             "supportedActions": {"requestAccess": {}}},
             {"name": "publishers/google/models/imageclassification-proprietary-vit",
              "openSourceCategory": "THIRD_PARTY_OWNED_OSS",
              "publisherModelTemplate": "projects/{project}/.."},
