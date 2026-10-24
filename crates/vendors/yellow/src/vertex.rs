@@ -4,24 +4,23 @@
 //! access token. And its express mode ([`EXPRESS`]): Gemini's
 //! `generateContent` alone, with an API key.
 
-use std::borrow::Cow;
-
-use respan_gateway_conversation::Input;
+use respan_gateway_conversation::{Input, Output};
 use respan_gateway_conversation_http::Schema;
 use respan_gateway_conversation_http::anthropic::AnthropicMessages;
-use respan_gateway_conversation_http::dialect::{Call, Dialect, Dialected};
 use respan_gateway_conversation_http::gemini::GeminiGenerate;
 use respan_gateway_conversation_http::openai::OpenAiChat;
-use respan_gateway_core::Fault;
 use respan_gateway_core::futures::future::join_all;
+use respan_gateway_core::{Fault, Filter};
+use respan_gateway_http::bytes::Bytes;
+use respan_gateway_http::http::request::Parts as RequestHead;
+use respan_gateway_http::path::set_path;
 use respan_gateway_media::embedding;
-use respan_gateway_media_http::dialect::{Dialect as MediaDialect, Dialected as MediaDialected};
 use respan_gateway_media_http::openai::OpenAiEmbeddings;
 use serde_json::{Map, Value};
 
 use respan_gateway_vendor_kit::{
-    Ask, Body, BoxFuture, KeyIn, Model, Models, Vendor, VendorProvider, built_wrong, http,
-    json as body_json, located,
+    Ask, Body, BoxFuture, Dialect, Dialected, KeyIn, Model, Models, Rewrite, Vendor,
+    VendorProvider, built_wrong, http, json as body_json, located,
 };
 
 /// A project's location, under which each of its APIs is.
@@ -82,7 +81,7 @@ pub const VENDOR: Vendor = Vendor {
         (&Dialected::new(AnthropicMessages, Claude), Some(ANTHROPIC)),
         (&Dialected::new(OpenAiChat, OpenApi), Some(LOCATION)),
         (
-            &MediaDialected::new(OpenAiEmbeddings, OpenApi),
+            &Dialected::new(OpenAiEmbeddings, Embeddings),
             Some(OPENAI_API),
         ),
     ],
@@ -147,6 +146,9 @@ fn format_for(ask: &Ask, model: &Model) -> Option<&'static str> {
 pub struct Vertex;
 
 impl Dialect for Vertex {
+    type Input = Input;
+    type Output = Output;
+
     fn key(&self) -> Option<KeyIn> {
         Some(KeyIn::Bearer)
     }
@@ -160,101 +162,128 @@ impl Dialect for Vertex {
 pub struct Claude;
 
 impl Dialect for Claude {
+    type Input = Input;
+    type Output = Output;
+
     fn key(&self) -> Option<KeyIn> {
         Some(KeyIn::Bearer)
     }
 
-    fn target(&self, input: &Input, stream: bool) -> Result<Option<String>, Fault> {
-        let model = segment(input.model.as_deref(), "claude-sonnet-5-5")?;
-        let method = if stream {
-            "streamRawPredict"
-        } else {
-            "rawPredict"
+    fn request(
+        &self,
+        head: &mut RequestHead,
+        body: Option<&Bytes>,
+    ) -> Result<Option<Rewrite>, Fault> {
+        let Some(mut call) = body.map(json_call).transpose()? else {
+            return Ok(None);
         };
-        Ok(Some(format!("/models/{model}:{method}")))
-    }
-
-    fn body(&self, body: &mut Map<String, Value>) {
-        body.shift_remove("model");
-        body.insert("anthropic_version".into(), "vertex-2023-10-16".into());
+        let model = call.get("model").and_then(Value::as_str);
+        let model = segment(model, "claude-sonnet-5-5")?;
+        set_path(head, &format!("/models/{model}:{}", predict(&call)))?;
+        call.shift_remove("model");
+        call.insert("anthropic_version".into(), "vertex-2023-10-16".into());
+        Ok(Some(rewritten(call)))
     }
 }
 
-/// Its Chat Completions and embeddings, at its OpenAI-compatible API: a
-/// Google model named as it is (`gemini-3.5-flash`) is
-/// `google/gemini-3.5-flash` there. A chat with one of Mistral's
-/// (`mistralai/..`) is posted to the model's own `rawPredict`, or
-/// `streamRawPredict` for a stream, named without its publisher, as
-/// Vertex serves no Mistral model at its OpenAI-compatible API.
+/// Its Chat Completions, at its OpenAI-compatible API: a Google model
+/// named as it is (`gemini-3.5-flash`) is `google/gemini-3.5-flash` there.
+/// A chat with one of Mistral's (`mistralai/..`) is posted to the model's
+/// own `rawPredict`, or `streamRawPredict` for a stream, named without its
+/// publisher, as Vertex serves no Mistral model at its OpenAI-compatible
+/// API.
 #[derive(Debug, Clone, Copy)]
 pub struct OpenApi;
 
+impl Dialect for OpenApi {
+    type Input = Input;
+    type Output = Output;
+
+    fn inputs(&self) -> Option<Box<dyn Filter<Input>>> {
+        Some(Box::new(|input: &mut Input| {
+            input.model = published(input.model.take());
+            Ok(())
+        }))
+    }
+
+    fn key(&self) -> Option<KeyIn> {
+        Some(KeyIn::Bearer)
+    }
+
+    fn request(
+        &self,
+        head: &mut RequestHead,
+        body: Option<&Bytes>,
+    ) -> Result<Option<Rewrite>, Fault> {
+        let Some(mut call) = body.map(json_call).transpose()? else {
+            return Ok(None);
+        };
+        let model = call.get("model").and_then(Value::as_str);
+        let Some(model) = model.and_then(|m| m.strip_prefix("mistralai/")) else {
+            set_path(head, "/endpoints/openapi/chat/completions")?;
+            return Ok(None);
+        };
+        let model = segment(Some(model), "mistralai/mistral-medium-3")?.to_owned();
+        let at = format!("/publishers/mistralai/models/{model}:{}", predict(&call));
+        set_path(head, &at)?;
+        call.insert("model".into(), model.into());
+        Ok(Some(rewritten(call)))
+    }
+}
+
+/// Its embeddings, at its OpenAI-compatible API, a Google model named
+/// with its publisher, as its Chat Completions name it ([`OpenApi`]).
+#[derive(Debug, Clone, Copy)]
+pub struct Embeddings;
+
+impl Dialect for Embeddings {
+    type Input = embedding::Input;
+    type Output = embedding::Output;
+
+    fn inputs(&self) -> Option<Box<dyn Filter<embedding::Input>>> {
+        Some(Box::new(|input: &mut embedding::Input| {
+            input.model = published(input.model.take());
+            Ok(())
+        }))
+    }
+
+    fn key(&self) -> Option<KeyIn> {
+        Some(KeyIn::Bearer)
+    }
+}
+
 /// A model named as its OpenAI-compatible API names it: with its
 /// publisher, `google` if it has none.
-fn published(model: Option<&str>) -> Option<String> {
+fn published(model: Option<String>) -> Option<String> {
     let model = model?;
     Some(match model.contains('/') {
-        true => model.to_owned(),
+        true => model,
         false => format!("google/{model}"),
     })
 }
 
-impl Dialect for OpenApi {
-    fn input<'a>(&self, input: &'a Input, _: &Call) -> Result<Cow<'a, Input>, Fault> {
-        let model = published(input.model.as_deref());
-        if model == input.model {
-            return Ok(Cow::Borrowed(input));
-        }
-        let mut input = input.clone();
-        input.model = model;
-        Ok(Cow::Owned(input))
-    }
-
-    fn key(&self) -> Option<KeyIn> {
-        Some(KeyIn::Bearer)
-    }
-
-    fn target(&self, input: &Input, stream: bool) -> Result<Option<String>, Fault> {
-        let mistral = input
-            .model
-            .as_deref()
-            .and_then(|m| m.strip_prefix("mistralai/"));
-        Ok(Some(match mistral {
-            Some(model) => {
-                let model = segment(Some(model), "mistralai/mistral-medium-3")?;
-                let method = if stream {
-                    "streamRawPredict"
-                } else {
-                    "rawPredict"
-                };
-                format!("/publishers/mistralai/models/{model}:{method}")
-            }
-            None => "/endpoints/openapi/chat/completions".to_owned(),
-        }))
-    }
-
-    fn body(&self, body: &mut Map<String, Value>) {
-        let model = body.get("model").and_then(Value::as_str);
-        if let Some(model) = model.and_then(|m| m.strip_prefix("mistralai/")) {
-            body.insert("model".into(), model.to_owned().into());
-        }
+/// The method a model's own endpoint takes `call` at: `streamRawPredict`
+/// if it asks for a stream, else `rawPredict`.
+fn predict(call: &Map<String, Value>) -> &'static str {
+    match call.get("stream").and_then(Value::as_bool) {
+        Some(true) => "streamRawPredict",
+        _ => "rawPredict",
     }
 }
 
-impl MediaDialect<embedding::Input, embedding::Output> for OpenApi {
-    fn input<'a>(&self, input: &'a embedding::Input) -> Result<Cow<'a, embedding::Input>, Fault> {
-        let model = published(input.model.as_deref());
-        if model == input.model {
-            return Ok(Cow::Borrowed(input));
-        }
-        let mut input = input.clone();
-        input.model = model;
-        Ok(Cow::Owned(input))
-    }
+/// A call's body as the JSON object its format wrote.
+fn json_call(body: &Bytes) -> Result<Map<String, Value>, Fault> {
+    serde_json::from_slice(body)
+        .map_err(|e| Fault::internal("a Vertex AI call is no JSON object").with_source(e))
+}
 
-    fn key(&self) -> Option<KeyIn> {
-        Some(KeyIn::Bearer)
-    }
+/// A call's body rewritten as `call`.
+fn rewritten(call: Map<String, Value>) -> Rewrite {
+    Box::new(move |_: Bytes| {
+        serde_json::to_vec(&call)
+            .map(Bytes::from)
+            .map_err(|e| Fault::internal("a Vertex AI call could not be written").with_source(e))
+    })
 }
 
 /// `model` as one segment of a path, refused if it is not one, as `like`.
@@ -403,35 +432,46 @@ mod tests {
         assert_eq!(formats.count(), 4);
     }
 
+    /// The path `dialect` posts `call` to, and its body, as the format
+    /// wrote it at `/chat`.
+    fn called<D: Dialect>(dialect: &D, call: Value) -> Result<(String, Value), Fault> {
+        let head = http::Request::post("/chat").body(()).expect("head");
+        let mut head = head.into_parts().0;
+        let body = Bytes::from(call.to_string());
+        let body = match dialect.request(&mut head, Some(&body))? {
+            Some(rewrite) => rewrite(body)?,
+            None => body,
+        };
+        let body = serde_json::from_slice(&body).expect("JSON");
+        Ok((head.uri.to_string(), body))
+    }
+
     #[test]
     fn claude_is_posted_to_its_raw_predict_without_its_model() {
-        let path = |stream| Claude.target(&input("claude-haiku-5-5"), stream);
+        let call = json!({"model": "claude-haiku-5-5", "max_tokens": 5, "messages": []});
+        let (path, body) = called(&Claude, call).expect("called");
+        assert_eq!(path, "/models/claude-haiku-5-5:rawPredict");
         assert_eq!(
-            path(false).ok().flatten().as_deref(),
-            Some("/models/claude-haiku-5-5:rawPredict")
-        );
-        assert_eq!(
-            path(true).ok().flatten().as_deref(),
-            Some("/models/claude-haiku-5-5:streamRawPredict")
-        );
-        assert!(Claude.target(&input("claude-x/../y"), false).is_err());
-        let mut body = json!({"model": "claude-haiku-5-5", "max_tokens": 5, "messages": []});
-        let body = body.as_object_mut().expect("object");
-        Claude.body(body);
-        assert_eq!(
-            Value::Object(body.clone()),
+            body,
             json!({"max_tokens": 5, "messages": [], "anthropic_version": "vertex-2023-10-16"})
         );
+        let streamed = json!({"model": "claude-haiku-5-5", "stream": true});
+        let (path, _) = called(&Claude, streamed).expect("called");
+        assert_eq!(path, "/models/claude-haiku-5-5:streamRawPredict");
+        assert!(called(&Claude, json!({"model": "claude-x/../y"})).is_err());
     }
 
     #[test]
     fn chat_completions_name_google_models_by_their_publisher() {
         let call = |model: &str| {
-            let taken = published(Some(model));
-            let path = OpenApi.target(&input(taken.as_deref().unwrap_or_default()), false);
-            (taken, path.ok().flatten())
+            let mut out = Vec::new();
+            let mut inputs = OpenApi.inputs().expect("inputs");
+            inputs.edit(input(model), &mut out).expect("edited");
+            let model = out.pop().and_then(|i| i.model);
+            let (path, body) = called(&OpenApi, json!({ "model": model })).expect("called");
+            (body["model"].as_str().map(str::to_owned), path)
         };
-        let chat = Some("/endpoints/openapi/chat/completions".to_owned());
+        let chat = "/endpoints/openapi/chat/completions".to_owned();
         assert_eq!(
             call("gemini-3.5-flash"),
             (Some("google/gemini-3.5-flash".into()), chat.clone())
@@ -444,13 +484,12 @@ mod tests {
             )
         );
         assert_eq!(
-            call("mistralai/mistral-medium-3").1.as_deref(),
-            Some("/publishers/mistralai/models/mistral-medium-3:rawPredict")
+            call("mistralai/mistral-medium-3"),
+            (
+                Some("mistral-medium-3".into()),
+                "/publishers/mistralai/models/mistral-medium-3:rawPredict".to_owned()
+            )
         );
-        let mut body = json!({"model": "mistralai/mistral-medium-3"});
-        let body = body.as_object_mut().expect("object");
-        OpenApi.body(body);
-        assert_eq!(body["model"], "mistral-medium-3");
     }
 
     #[test]
