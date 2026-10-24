@@ -1597,6 +1597,7 @@ dependencies = [
  "respan-gateway-core",
  "respan-gateway-decision",
  "respan-gateway-decision-http",
+ "respan-gateway-eventstream",
  "respan-gateway-http",
  "respan-gateway-http-faults",
  "respan-gateway-http-transport",

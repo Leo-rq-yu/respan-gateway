@@ -10,6 +10,7 @@ use respan_gateway_conversation::{
 use respan_gateway_core::{Fault, NativeFields};
 use serde_json::{Map, Value, json};
 
+use super::read::CACHE_MARKER;
 use super::{BEDROCK, ROLES};
 use crate::schema::{
     Keep, NativeFieldsExt, arguments_object, encode_native, kept_fields, reasoning_of, set,
@@ -36,7 +37,13 @@ pub(super) fn split_system(chat: &Input) -> Result<(Vec<Value>, &[Message]), Fau
                     check(native, "a text part's fields")?;
                     if !text.trim().is_empty() {
                         blocks.push(json!({ "text": text }));
+                        if cached(native) {
+                            blocks.push(cache_point());
+                        }
                     }
+                }
+                Content::Native(raw) if *raw.format == *BEDROCK => {
+                    blocks.push(Value::clone(&raw.value));
                 }
                 _ => return Err(untranslatable("a system prompt that is not text")),
             }
@@ -66,10 +73,15 @@ pub(super) fn write_messages(messages: &[Message]) -> Result<Vec<Value>, Fault> 
         };
         let fields = |_: &str| "messages with fields the kind has no place for".to_owned();
         encode_native(BEDROCK, &m.native, &mut Map::new(), fields, Keep::default())?;
-        let parts = m.content.iter().filter(|c| !is_unsigned(c));
-        let blocks: Vec<Value> = parts
-            .filter_map(|c| block(c).transpose())
-            .collect::<Result<_, _>>()?;
+        let mut blocks: Vec<Value> = Vec::new();
+        for part in m.content.iter().filter(|c| !is_unsigned(c)) {
+            if let Some(written) = block(part)? {
+                blocks.push(written);
+                if marked(part) {
+                    blocks.push(cache_point());
+                }
+            }
+        }
         if blocks.is_empty() {
             continue;
         }
@@ -83,6 +95,29 @@ pub(super) fn write_messages(messages: &[Message]) -> Result<Vec<Value>, Fault> 
         }
     }
     Ok(out)
+}
+
+/// What Converse caches up to: a `cachePoint` after the block.
+fn cache_point() -> Value {
+    json!({ "cachePoint": { "type": "default" } })
+}
+
+/// Whether fields hold a cache marker, Anthropic's `cache_control` or one
+/// a `cachePoint` of this format's put there: the block they are on is
+/// cached up to, whichever format marked it.
+fn cached(native: &Option<NativeFields>) -> bool {
+    native.fields().contains_key(CACHE_MARKER)
+}
+
+/// Whether a part is marked to be cached up to.
+fn marked(part: &Content) -> bool {
+    match part {
+        Content::Text { native, .. }
+        | Content::ToolCall { native, .. }
+        | Content::ToolResult { native, .. } => cached(native),
+        Content::Image(media) | Content::Document(media) => cached(&media.native),
+        _ => false,
+    }
 }
 
 /// A part as a content block; `None` for a text that says nothing.
@@ -276,7 +311,8 @@ pub(super) fn write_tools(chat: &Input, v: &mut Map<String, Value>) -> Result<()
             false => json!({ "type": "object" }),
         };
         spec.insert("inputSchema".into(), json!({ "json": schema }));
-        let fields = kept_fields(BEDROCK, &t.native, tool_field, Keep::CACHE_MARKER)?;
+        let mut fields = kept_fields(BEDROCK, &t.native, tool_field, Keep::CACHE_MARKER)?;
+        fields.shift_remove(CACHE_MARKER);
         spec.extend(fields);
         Ok(json!({ "toolSpec": spec }))
     };
@@ -287,7 +323,13 @@ pub(super) fn write_tools(chat: &Input, v: &mut Map<String, Value>) -> Result<()
         Some(ToolChoice::Tool(name)) => Some(json!({ "tool": { "name": name } })),
         Some(_) => return Err(untranslatable("a tool choice this format has no form for")),
     };
-    let tools: Vec<Value> = chat.tools.iter().map(tool).collect::<Result<_, _>>()?;
+    let mut tools: Vec<Value> = Vec::new();
+    for t in &chat.tools {
+        tools.push(tool(t)?);
+        if cached(&t.native) {
+            tools.push(cache_point());
+        }
+    }
     if tools.is_empty() {
         return Ok(());
     }
@@ -308,8 +350,23 @@ pub(super) fn write_config(chat: &Input, v: &mut Map<String, Value>) -> Result<(
     if chat.user.is_some() {
         return Err(untranslatable("an end user's id"));
     }
-    if !matches!(o.response_format, None | Some(ResponseFormat::Text)) {
-        return Err(untranslatable("structured output"));
+    match &o.response_format {
+        None | Some(ResponseFormat::Text) => {}
+        Some(ResponseFormat::JsonSchema {
+            name,
+            description,
+            schema,
+            ..
+        }) => {
+            let mut json_schema = json!({ "schema": schema.to_string(), "name": name });
+            if let Some(description) = description {
+                json_schema["description"] = description.as_str().into();
+            }
+            let structure = json!({ "jsonSchema": json_schema });
+            let format = json!({ "type": "json_schema", "structure": structure });
+            v.insert("outputConfig".into(), json!({ "textFormat": format }));
+        }
+        Some(_) => return Err(untranslatable("JSON output without a schema")),
     }
     let mut config = Map::new();
     set(

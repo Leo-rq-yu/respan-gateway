@@ -1,6 +1,8 @@
 //! Amazon Bedrock's Converse: `POST /model/{modelId}/converse` and
 //! `/converse-stream`, of the conversation kind, as a [`Schema`]
-//! ([`BedrockConverse`]), spoken to a provider; there is no client edge.
+//! ([`BedrockConverse`]), at both edges: a client of the Bedrock Runtime
+//! SDKs (its endpoint the gateway's, its key a bearer token) talks to any
+//! model the gateway routes to, and a provider is Bedrock.
 //!
 //! The model is in the path, escaped whole (an inference profile's id,
 //! `us.anthropic.claude-sonnet-4-20250514-v1:0`, or an ARN, is one segment),
@@ -11,18 +13,28 @@
 //!
 //! The leading system messages are the `system` blocks. `messages` are the
 //! rest, a message of the role before it joined to that one, as Converse needs
-//! the roles to alternate, and a blank text left out. A part is a `text`,
+//! the roles to alternate, and a blank text left out; a part, tool or
+//! system block with a cache marker (Anthropic's `cache_control`, or a
+//! client's `cachePoint`) is followed by a `cachePoint`. A part is a `text`,
 //! an `image` or `document` (bytes only: a URL is refused, as the format has
 //! no fetch), a `toolUse` or `toolResult` (`status: "error"` for a failed
 //! one), or `reasoningContent` that Bedrock signed or redacted, which is the
 //! only reasoning sent back. `inferenceConfig` has `maxTokens`,
 //! `temperature`, `topP` and `stopSequences`; `toolConfig` the tools and the
-//! choice (`auto`, `any`, or one `tool`). A reasoning budget is
+//! choice (`auto`, `any`, or one `tool`); `outputConfig` a JSON schema the
+//! answer keeps to. A reasoning budget is
 //! `additionalModelRequestFields.thinking`, and `Off` its disabling.
 //!
-//! Refused as having no field: `top_k`, an effort, structured output, an end
-//! user's id, one tool call at a time, audio, a system message after the
-//! conversation starts, and the fields of another format.
+//! Refused as having no field: `top_k`, an effort, JSON without a schema, an
+//! end user's id, one tool call at a time, audio, a system message after
+//! the conversation starts, and the fields of another format.
+//!
+//! A client's request is read the same way back; what the kind has no form
+//! for (a guardrail, a service tier, a guard or video block, media in S3,
+//! the model's own `additionalModelRequestFields`) stays native, so only a
+//! Bedrock provider is sent it. Its answer is Converse's body, or for
+//! `converse-stream` the event stream, its failures an `exception`
+//! message; a refusal is `{"message"}` with its type in `x-amzn-errortype`.
 //!
 //! # Responses as events
 //!
@@ -50,6 +62,8 @@
 //! requests are not signed with SigV4.
 
 mod decode;
+mod encode;
+mod read;
 mod request;
 #[cfg(test)]
 mod tests;
@@ -58,8 +72,12 @@ use crate::schema::{Asked, Framing, Names, Schema, unwritable_content};
 use respan_gateway_conversation::{Assembled, Content, Finish, Input, Output, Role};
 use respan_gateway_core::{Connection, Fault, Format, Provider};
 use respan_gateway_http::bytes::Bytes;
+use respan_gateway_http::http::header::{CONTENT_TYPE, HeaderName, HeaderValue};
+use respan_gateway_http::http::{
+    self, request::Parts as RequestHead, response::Parts as ResponseHead,
+};
 use respan_gateway_http::path::escape;
-use respan_gateway_http::{Connect, Encoder, ProviderIo, Upstream};
+use respan_gateway_http::{ClientIo, Connect, Encoder, ProviderIo, Upstream};
 use serde_json::{Map, Value, json};
 
 use decode::ConverseDecoder;
@@ -128,9 +146,52 @@ impl Format<ProviderIo, Output, Input> for BedrockConverse {
     }
 }
 
-/// The fault of what only a client edge does.
-fn no_client() -> Fault {
-    Fault::internal("bedrock-converse is spoken to a provider, not by a client")
+impl Format<ClientIo, Input, Output> for BedrockConverse {
+    fn name(&self) -> &str {
+        BEDROCK
+    }
+    fn matches(&self, io: &ClientIo) -> bool {
+        self.accepts(io.request())
+    }
+    fn bind(&self, io: ClientIo) -> Result<Connection<Input, Output>, Fault> {
+        self.bind_client(io)
+    }
+}
+
+/// The media type of ConverseStream's answer.
+const EVENT_STREAM: &str = "application/vnd.amazon.eventstream";
+
+/// The header Bedrock names an error's type in, which its SDKs read.
+const ERROR_TYPE: HeaderName = HeaderName::from_static("x-amzn-errortype");
+
+/// The model, unescaped, and whether a stream is asked, of a Converse path:
+/// `.../model/{model}/converse` or `/converse-stream`.
+pub fn call_of(uri: &http::Uri) -> Option<(String, bool)> {
+    let mut segments = uri.path().rsplit('/');
+    let stream = match segments.next()? {
+        "converse" => false,
+        "converse-stream" => true,
+        _ => return None,
+    };
+    let model = segments.next().filter(|m| !m.is_empty())?;
+    (segments.next() == Some("model")).then(|| {
+        let model = percent_encoding::percent_decode_str(model).decode_utf8_lossy();
+        (model.into_owned(), stream)
+    })
+}
+
+/// The type Bedrock names an error of `status` by.
+fn error_type(status: http::StatusCode) -> &'static str {
+    match status.as_u16() {
+        400 | 413 | 422 => "ValidationException",
+        401 | 403 => "AccessDeniedException",
+        404 => "ResourceNotFoundException",
+        408 => "ModelTimeoutException",
+        424 => "ModelErrorException",
+        429 => "ThrottlingException",
+        503 => "ServiceUnavailableException",
+        _ => "InternalServerException",
+    }
 }
 
 impl Schema for BedrockConverse {
@@ -146,6 +207,63 @@ impl Schema for BedrockConverse {
 
     fn decode_body(&self, v: &Value, out: &mut Vec<Output>) -> Result<(), Fault> {
         self.decoder().body(v, out)
+    }
+
+    fn accepts<B>(&self, request: &http::Request<B>) -> bool {
+        request.method() == http::Method::POST && call_of(request.uri()).is_some()
+    }
+
+    fn streams(uri: &http::Uri) -> bool {
+        call_of(uri).is_some_and(|(_, stream)| stream)
+    }
+
+    /// A client's request: its body, and the model its path names.
+    fn read_request(&self, head: &RequestHead) -> Box<dyn respan_gateway_http::Decoder<Input>> {
+        let (schema, head) = (*self, head.clone());
+        Box::new(move |raw: Bytes, out: &mut Vec<Input>| {
+            let v = match serde_json::from_slice::<Value>(&raw) {
+                Ok(v) if v.is_object() => v,
+                _ => return Err(Fault::bad_request("request body is not a JSON object")),
+            };
+            let mut chat = schema.decode_json(&v);
+            chat.model = call_of(&head.uri).map(|(model, _)| model);
+            out.push(chat);
+            Ok(())
+        })
+    }
+
+    /// The client's framing, by its path: ConverseStream's event stream for
+    /// a success it streams, else JSON.
+    fn response_encoder(
+        &self,
+        head: &mut ResponseHead,
+        request: &http::Request<Bytes>,
+    ) -> Box<dyn Encoder<Output>> {
+        let stream = Self::streams(request.uri()) && head.status.is_success();
+        let media = if stream {
+            EVENT_STREAM
+        } else {
+            "application/json"
+        };
+        head.headers
+            .insert(CONTENT_TYPE, HeaderValue::from_static(media));
+        match stream {
+            true => self.stream_encoder(Asked::default()),
+            false => crate::schema::whole_encoder(*self),
+        }
+    }
+
+    /// Bedrock's error: `{"message"}`, its type in `x-amzn-errortype`.
+    fn refusal(
+        &self,
+        fault: &Fault,
+        _request: &http::Request<Bytes>,
+        head: &mut ResponseHead,
+    ) -> Bytes {
+        let body = crate::schema::refusal_body::<Self>(fault, head);
+        let kind = HeaderValue::from_static(error_type(head.status));
+        head.headers.insert(ERROR_TYPE, kind);
+        body
     }
 
     fn decode_part(_: &Value) -> Option<Content> {
@@ -173,8 +291,17 @@ impl Schema for BedrockConverse {
     fn encode_request(&self, chat: &Input) -> Result<Map<String, Value>, Fault> {
         let keep = crate::schema::Keep::default();
         let in_the_request = |key: &str| format!("'{key}' in the request");
-        let native = crate::schema::kept_fields(BEDROCK, &chat.native, in_the_request, keep)?;
+        let mut native = crate::schema::kept_fields(BEDROCK, &chat.native, in_the_request, keep)?;
         let mut v = self.encode_json(chat)?;
+        // The model's own fields beside the reasoning written from the kind.
+        let fields = "additionalModelRequestFields";
+        if let (Some(Value::Object(own)), Some(Value::Object(written))) =
+            (native.shift_remove(fields), v.get_mut(fields))
+        {
+            for (key, value) in own {
+                written.entry(key).or_insert(value);
+            }
+        }
         v.extend(native);
         Ok(v)
     }
@@ -210,16 +337,16 @@ impl Schema for BedrockConverse {
         Ok(v)
     }
 
-    fn decode_json(&self, _: &Value) -> Input {
-        Input::default()
+    fn decode_json(&self, v: &Value) -> Input {
+        read::read(v)
     }
 
-    fn encode_whole(&self, _: &Assembled) -> Result<Value, Fault> {
-        Err(no_client())
+    fn encode_whole(&self, whole: &Assembled) -> Result<Value, Fault> {
+        encode::whole(whole)
     }
 
     fn stream_encoder(&self, _: Asked) -> Box<dyn Encoder<Output>> {
-        Box::new(|_: &Output, _: &mut Vec<Bytes>| Err(no_client()))
+        Box::new(encode::EventStream::default())
     }
 
     /// Bedrock's error body: `{"message": ..}`.

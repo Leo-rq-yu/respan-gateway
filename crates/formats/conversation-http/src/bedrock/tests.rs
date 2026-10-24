@@ -596,3 +596,205 @@ fn a_refusal_is_read_as_bedrock_words_it() {
         Some(429)
     );
 }
+
+/// A client's request to `path`.
+fn client_request(path: &str) -> http::Request<Bytes> {
+    let mut request = http::Request::new(Bytes::new());
+    *request.uri_mut() = path.parse().expect("a path");
+    *request.method_mut() = http::Method::POST;
+    request
+}
+
+#[test]
+fn a_bedrock_sdk_request_reads_back_as_the_request_it_writes() {
+    let sent = json!({
+        "system": [{ "text": "be brief" }, { "cachePoint": { "type": "default" } }],
+        "messages": [
+            { "role": "user", "content": [
+                { "text": "look" },
+                { "image": { "format": "png", "source": { "bytes": "aW1n" } } },
+                { "cachePoint": { "type": "default" } },
+            ] },
+            { "role": "assistant", "content": [
+                { "reasoningContent": { "reasoningText": { "text": "hm", "signature": "sig" } } },
+                { "toolUse": { "toolUseId": "t1", "name": "lookup", "input": { "id": 7 } } },
+            ] },
+            { "role": "user", "content": [
+                { "toolResult": { "toolUseId": "t1", "content": [{ "text": "none" }], "status": "error" } },
+            ] },
+        ],
+        "toolConfig": {
+            "tools": [
+                { "toolSpec": { "name": "lookup", "description": "Looks up.",
+                                "inputSchema": { "json": { "type": "object" } } } },
+                { "cachePoint": { "type": "default" } },
+            ],
+            "toolChoice": { "any": {} },
+        },
+        "inferenceConfig": { "maxTokens": 100, "temperature": 0.5, "topP": 0.9, "stopSequences": ["END"] },
+        "outputConfig": { "textFormat": { "type": "json_schema", "structure": {
+            "jsonSchema": { "schema": "{\"type\":\"object\"}", "name": "answer" } } } },
+        "additionalModelRequestFields": { "thinking": { "type": "enabled", "budget_tokens": 2048 }, "top_k": 5 },
+        "guardrailConfig": { "guardrailIdentifier": "g", "guardrailVersion": "1" },
+    });
+    let read = BedrockConverse.decode_json(&sent);
+    assert_eq!(read.options.reasoning, Some(Reasoning::budget(2048)));
+    assert_eq!(read.options.tool_choice, Some(ToolChoice::Required));
+    assert_eq!(read.tools.len(), 1);
+    assert!(matches!(read.messages[1].content[1], Content::Image(_)));
+    assert_eq!(written(&read), sent);
+}
+
+#[test]
+fn a_cache_marker_of_any_format_is_a_cache_point_after_its_block() {
+    let mut marked = user("long context");
+    if let Content::Text { native, .. } = &mut marked.content[0] {
+        let marker = json!({ "cache_control": { "type": "ephemeral" } });
+        *native = Some(NativeFields::new(
+            "anthropic-messages",
+            marker.as_object().cloned().unwrap_or_default(),
+        ));
+    }
+    let chat = chat([marked, user("question")]);
+    assert_eq!(
+        written(&chat)["messages"][0]["content"],
+        json!([{ "text": "long context" }, { "cachePoint": { "type": "default" } }, { "text": "question" }])
+    );
+}
+
+#[test]
+fn a_path_names_the_model_unescaped_and_whether_it_streams() {
+    let call = |path: &str| call_of(&path.parse().expect("a path"));
+    assert_eq!(
+        call("/model/us.amazon.nova-lite-v1%3A0/converse"),
+        Some(("us.amazon.nova-lite-v1:0".into(), false))
+    );
+    assert_eq!(
+        call(
+            "/bedrock/model/arn%3Aaws%3Abedrock%3Aus-east-1%3A1%3Ainference-profile%2Fx/converse-stream"
+        ),
+        Some((
+            "arn:aws:bedrock:us-east-1:1:inference-profile/x".into(),
+            true
+        ))
+    );
+    for other in [
+        "/model//converse",
+        "/models/x/converse",
+        "/model/x/invoke",
+        "/converse",
+    ] {
+        assert_eq!(call(other), None, "{other}");
+    }
+}
+
+/// The events a client is answered with, written at `path`.
+fn answered(path: &str, replies: &[Output]) -> http::Response<Bytes> {
+    BedrockConverse
+        .encode_response(&client_request(path), replies)
+        .expect("a response")
+}
+
+fn reasoned_call() -> Vec<Output> {
+    let signature = json!({ "signature": "sig" })
+        .as_object()
+        .cloned()
+        .unwrap_or_default();
+    let call = Block::ToolCall {
+        id: "t1".into(),
+        name: "lookup".into(),
+    };
+    vec![
+        Output::Start(Start::new("", "")),
+        Output::block_start(0, Block::Reasoning),
+        Output::reasoning(0, "hm"),
+        Output::block_fields(BEDROCK, 0, signature),
+        Output::block_end(0),
+        Output::block_start(1, Block::Text),
+        Output::text(1, "Hi"),
+        Output::block_end(1),
+        Output::block_start(2, call),
+        Output::arguments(2, "{\"id\":7}"),
+        Output::block_end(2),
+        Output::finished(Finish::ToolUse),
+        Output::Usage(Usage {
+            input_tokens: 100,
+            output_tokens: 5,
+            cached_input_tokens: 60,
+            cache_write_input_tokens: 10,
+            ..Usage::default()
+        }),
+    ]
+}
+
+#[test]
+fn a_whole_answer_is_converses_body_its_input_apart_from_the_cache() {
+    let response = answered("/model/m/converse", &reasoned_call());
+    let content_type = response.headers().get(CONTENT_TYPE);
+    assert_eq!(
+        content_type,
+        Some(&HeaderValue::from_static("application/json"))
+    );
+    let body: Value = serde_json::from_slice(response.body()).expect("JSON");
+    assert_eq!(
+        body,
+        json!({
+            "output": { "message": { "role": "assistant", "content": [
+                { "reasoningContent": { "reasoningText": { "text": "hm", "signature": "sig" } } },
+                { "text": "Hi" },
+                { "toolUse": { "toolUseId": "t1", "name": "lookup", "input": { "id": 7 } } },
+            ] } },
+            "stopReason": "tool_use",
+            "usage": { "inputTokens": 30, "outputTokens": 5, "totalTokens": 105,
+                       "cacheReadInputTokens": 60, "cacheWriteInputTokens": 10 },
+            "metrics": { "latencyMs": 0 },
+        })
+    );
+}
+
+#[test]
+fn a_streamed_answer_is_the_event_stream_that_reads_back_as_its_events() {
+    let replies = reasoned_call();
+    let response = answered("/model/m/converse-stream", &replies);
+    let content_type = response.headers().get(CONTENT_TYPE);
+    let media = HeaderValue::from_static("application/vnd.amazon.eventstream");
+    assert_eq!(content_type, Some(&media));
+    let read = decode_chunks(&[response.body().clone()]).expect("events");
+    let said = |events: &[Output]| -> Vec<Output> {
+        let not_native = |e: &&Output| !matches!(e, Output::Native(n) if respan_gateway_conversation::block_fields(&n.value).is_none());
+        events.iter().filter(not_native).cloned().collect()
+    };
+    assert_eq!(said(&read), said(&replies));
+}
+
+#[test]
+fn a_failure_mid_stream_is_an_exception_and_a_refusal_names_its_type() {
+    let mut encoder = BedrockConverse.stream_encoder(Asked::default());
+    let mut frames = Vec::new();
+    for reply in &reasoned_call()[..7] {
+        encoder.encode(reply, &mut frames).expect("a frame");
+    }
+    let fault = Fault::upstream("overloaded").with(respan_gateway_http_faults::Status(
+        http::StatusCode::SERVICE_UNAVAILABLE,
+    ));
+    encoder
+        .end(Err(fault.clone()), &mut frames)
+        .expect("an end");
+    let mut parser = respan_gateway_eventstream::Parser::new(None);
+    let messages = parser.push(stream_of(frames).into()).expect("messages");
+    let last = messages.last().expect("a message");
+    assert_eq!(last.text(":message-type"), Some("exception"));
+    assert_eq!(
+        last.text(":exception-type"),
+        Some("serviceUnavailableException")
+    );
+    assert!(decode_chunks(&[stream_of(vec![last.encode()]).into()]).is_err());
+
+    let mut head = http::Response::new(()).into_parts().0;
+    head.status = http::StatusCode::TOO_MANY_REQUESTS;
+    let body = BedrockConverse.refusal(&fault, &client_request("/model/m/converse"), &mut head);
+    let kind = head.headers.get("x-amzn-errortype");
+    assert_eq!(kind, Some(&HeaderValue::from_static("ThrottlingException")));
+    let body: Value = serde_json::from_slice(&body).expect("JSON");
+    assert_eq!(body["message"], "overloaded");
+}

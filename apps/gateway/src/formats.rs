@@ -208,6 +208,10 @@ mod endpoints {
         "POST /v1beta/models/{model}:generateContent",
         "POST /v1beta/models/{model}:streamGenerateContent",
     ];
+    pub const CONVERSE: &[&str] = &[
+        "POST /model/{model}/converse",
+        "POST /model/{model}/converse-stream",
+    ];
     pub const IMAGES: &[&str] = &["POST /v1/images/generations", "POST /v1/images/edits"];
     pub const TRANSCRIPTIONS: &[&str] = &[
         "POST /v1/audio/transcriptions",
@@ -281,7 +285,7 @@ pub fn formats() -> Vec<KnownFormat> {
         KnownFormat::of(kind::VIDEO, endpoints::VEO, GeminiVeo)
             .job_ids("veo_")
             .model(Model::of(video::Input::model, video::Input::set_model)),
-        KnownFormat::provider_only(kind::CHAT, &BedrockConverse),
+        KnownFormat::of(kind::CHAT, endpoints::CONVERSE, BedrockConverse).model(chat()),
         KnownFormat::provider_only(kind::EMBEDDING, &BedrockEmbeddings),
         KnownFormat::of(kind::DECISION, endpoints::DECISIONS, Decisions).model(Model::of(
             decision::Input::model,
