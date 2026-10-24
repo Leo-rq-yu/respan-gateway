@@ -173,6 +173,20 @@ mod tests {
     }
 
     #[test]
+    fn an_escaped_model_id_is_one_segment_that_decodes_back() {
+        for id in [
+            "anthropic.claude-haiku-4-5-20251001-v1:0",
+            "arn:aws:bedrock:us-east-1:123456789012:inference-profile/us.amazon.nova-lite-v1:0",
+            "a b?c#d%e",
+        ] {
+            let escaped = escape(id);
+            assert!(!escaped.contains(['/', ':', '?', '#', ' ']), "{escaped}");
+            assert_eq!(decoded(&escaped), id);
+        }
+        assert_eq!(escape("cohere.embed-v4_0~x"), "cohere.embed-v4_0~x");
+    }
+
+    #[test]
     fn only_well_formed_escapes_decode() {
         assert_eq!(decoded("%2e%2E%zz%4"), "..%zz%4");
         assert_eq!(decoded("%FF"), "\u{FFFD}");
