@@ -2,8 +2,7 @@
 //! [`speech`](respan_gateway_media::speech) kind, [`GeminiSpeech`].
 
 use super::is_segment;
-use crate::dialect::{self, Spec};
-use crate::edge::sends;
+use crate::edge::{bind_provider, sends};
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD;
 use respan_gateway_conversation_http::fields::{invalid, kept};
@@ -12,10 +11,8 @@ use respan_gateway_core::Connection;
 use respan_gateway_core::{ErrorCode, Fault, Format, Provider};
 use respan_gateway_http::bytes::{BufMut, Bytes, BytesMut};
 use respan_gateway_http::http::header::CONTENT_TYPE;
-use respan_gateway_http::http::{
-    self, HeaderValue, request::Parts as RequestHead, response::Parts as ResponseHead,
-};
-use respan_gateway_http::{Connect, Decoder, Encoder, KeyIn, ProviderIo, Upstream, Whole};
+use respan_gateway_http::http::{HeaderValue, request::Parts as RequestHead};
+use respan_gateway_http::{Connect, Encoder, KeyIn, ProviderIo, Upstream, Whole};
 use respan_gateway_media::speech::{Input, Output};
 use serde_json::{Map, Value, json};
 
@@ -67,31 +64,9 @@ impl Format<ProviderIo, Output, Input> for GeminiSpeech {
     }
 
     fn bind(&self, io: ProviderIo) -> Result<Connection<Output, Input>, Fault> {
-        Ok(dialect::bind(*self, io))
-    }
-}
-
-/// Its spec's parts, which a vendor's dialect runs around.
-impl Spec for GeminiSpeech {
-    type Input = Input;
-    type Output = Output;
-    const NAME: &'static str = NAME;
-
-    fn post(
-        &self,
-        head: &mut RequestHead,
-        input: &Input,
-        _: bool,
-    ) -> Result<Box<dyn Encoder<Input>>, Fault> {
-        call(head, input)
-    }
-
-    fn read_response(
-        &self,
-        _: &ResponseHead,
-        _: &http::Request<Bytes>,
-    ) -> Option<Box<dyn Decoder<Output>>> {
-        Some(Box::new(Whole::new(read_response)))
+        Ok(bind_provider(io, NAME, call, |_, _| {
+            Some(Box::new(Whole::new(read_response)))
+        }))
     }
 }
 
@@ -233,6 +208,7 @@ fn wav_of(samples: &[u8], rate: u32) -> Bytes {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use respan_gateway_http::http;
 
     fn input(format: Option<&str>) -> Input {
         let mut input = Input::new("Hello.");

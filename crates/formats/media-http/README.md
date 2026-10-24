@@ -52,14 +52,9 @@ version, as OpenAI's SDKs take it: `https://api.openai.com/v1`,
 Vendors' fields the kind has no form for (Groq's `x_groq`, Together's
 `steps`) stay native, so a relay in the same format keeps them.
 
-`dialect::{Spec, Dialect, Dialected}`: a format as a vendor speaks it.
-`OpenAiSpeech`, `OpenAiEmbeddings`, `GeminiImages`, `GeminiSpeech` and
-`GeminiTranscriptions` are each a `Spec`, its provider edge in parts; a vendor's `Dialect` says what
-it takes and answers beyond the spec
-(its input before the spec writes it, how its answer is read, whether it
-streams, where its key goes), and `Dialected::new(spec, dialect)` is a
-provider format of the spec's name, so a client of the spec is still
-relayed to it.
+A vendor's departures from one of these formats are its dialect of it,
+laid over the format (`respan_gateway_http::dialect::Dialected`), so a
+client of the spec is still relayed to it.
 
 `gemini::GeminiImages`, named `gemini-images`: Gemini's image models,
 such as Nano Banana, through `generateContent`, to clients and providers,
@@ -170,8 +165,8 @@ the Gemini API's base (`x-goog-api-key`) or Vertex AI's.
 `gemini::VertexVeo`, named `vertex-veo`: Veo as Vertex AI serves it, to
 providers only, at
 `https://{location}-aiplatform.googleapis.com/v1/projects/{project}/locations/{location}/publishers/google`
-with a Google access token as the bearer key. Vertex polls with a `POST`,
-which a `Dialect` cannot say (it changes no path or method), so it is a
+with a Google access token as the bearer key. Vertex polls with a `POST`
+of the operation's name, a call `gemini-veo` has none of, so it is a
 format of its own beside `gemini-veo`.
 
 - A `Create` is `POST /models/{model}:predictLongRunning`, as `gemini-veo`

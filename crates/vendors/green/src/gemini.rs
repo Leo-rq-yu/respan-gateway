@@ -2,18 +2,14 @@
 //! OpenAI-compatible base, and its own API beside it: `generateContent`,
 //! for chats, images, speech and transcriptions, Gemini Live and Veo.
 
-use std::borrow::Cow;
-
 use respan_gateway_conversation::{Content, Input, Output, Role};
 use respan_gateway_conversation_http::Schema;
-use respan_gateway_conversation_http::dialect::{Call, Dialect, Dialected};
 use respan_gateway_core::{Fault, Filter, NativeFields};
 use serde_json::{Map, Value, json};
 
 use respan_gateway_conversation_http::gemini::{GeminiGenerate, needs_signatures};
 use respan_gateway_conversation_http::openai::OpenAiChat;
 use respan_gateway_media::transcription;
-use respan_gateway_media_http::dialect::{Dialect as MediaDialect, Dialected as MediaDialected};
 use respan_gateway_media_http::gemini::{
     GeminiImages, GeminiSpeech, GeminiTranscriptions, GeminiVeo,
 };
@@ -21,8 +17,8 @@ use respan_gateway_media_http::openai::OpenAiEmbeddings;
 use respan_gateway_realtime_ws::GeminiLive;
 
 use respan_gateway_vendor_kit::{
-    Body, BoxFuture, Capability, Model, Models, Vendor, VendorProvider, built_wrong, chat, http,
-    json as body_json, models, transcription as text_only,
+    Body, BoxFuture, Capability, Dialect, Dialected, Model, Models, Vendor, VendorProvider,
+    built_wrong, http, json as body_json, models, transcription as text_only,
 };
 
 /// Its own API: `generateContent` and Veo.
@@ -48,7 +44,7 @@ pub const VENDOR: Vendor = Vendor {
         (&GeminiLive, Some(LIVE)),
         (&GeminiImages, Some(API)),
         (
-            &MediaDialected::new(GeminiTranscriptions, Gemini),
+            &Dialected::new(GeminiTranscriptions, Transcriptions),
             Some(API),
         ),
         (&GeminiSpeech, Some(API)),
@@ -60,13 +56,16 @@ pub const VENDOR: Vendor = Vendor {
 };
 
 /// Gemini's transcriptions: the text alone, so the client's other fields
-/// are refused.
-impl MediaDialect<transcription::Input, transcription::Output> for Gemini {
-    fn input<'a>(
-        &self,
-        input: &'a transcription::Input,
-    ) -> Result<Cow<'a, transcription::Input>, Fault> {
-        text_only::text_only(input)
+/// are refused ([`text_only::text_only`]).
+#[derive(Debug, Clone, Copy)]
+pub struct Transcriptions;
+
+impl Dialect for Transcriptions {
+    type Input = transcription::Input;
+    type Output = transcription::Output;
+
+    fn inputs(&self) -> Option<Box<dyn Filter<transcription::Input>>> {
+        Some(Box::new(text_only::text_only))
     }
 }
 
@@ -82,24 +81,20 @@ pub use respan_gateway_conversation_http::gemini::SIGNATURE_PLACEHOLDER;
 pub struct Gemini;
 
 impl Dialect for Gemini {
-    fn input<'a>(&self, input: &'a Input, _: &Call) -> Result<Cow<'a, Input>, Fault> {
-        let calls = |m: &respan_gateway_conversation::Message| {
-            m.role == Role::Assistant
-                && m.content
-                    .iter()
-                    .any(|p| matches!(p, Content::ToolCall { .. }))
-        };
-        if !needs_signatures(input.model.as_deref()) || !input.messages.iter().any(calls) {
-            return Ok(Cow::Borrowed(input));
-        }
-        let mut input = input.clone();
-        sign_calls(&mut input);
-        Ok(Cow::Owned(input))
-    }
+    type Input = Input;
+    type Output = Output;
 
-    fn output(&self, call: &Call) -> Option<Box<dyn Filter<Output>>> {
-        chat::read(call, &["extra_content"], false)
+    fn inputs(&self) -> Option<Box<dyn Filter<Input>>> {
+        Some(Box::new(signed))
     }
+}
+
+/// `input`, its calls signed if its model needs them signed.
+fn signed(input: &mut Input) -> Result<(), Fault> {
+    if needs_signatures(input.model.as_deref()) {
+        sign_calls(input);
+    }
+    Ok(())
 }
 
 /// Signs, with the placeholder in its `extra_content`, the first call of

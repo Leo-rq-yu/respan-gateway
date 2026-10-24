@@ -3,8 +3,7 @@
 //! [`GeminiTranscriptions`].
 
 use super::is_segment;
-use crate::dialect::{self, Spec};
-use crate::edge::sends;
+use crate::edge::{bind_provider, sends};
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD;
 use respan_gateway_conversation::MediaSource;
@@ -13,10 +12,8 @@ use respan_gateway_conversation_http::gemini::usage_of;
 use respan_gateway_core::{Connection, ErrorCode, Fault, Format, Provider};
 use respan_gateway_http::bytes::Bytes;
 use respan_gateway_http::http::header::CONTENT_TYPE;
-use respan_gateway_http::http::{
-    self, HeaderValue, request::Parts as RequestHead, response::Parts as ResponseHead,
-};
-use respan_gateway_http::{Connect, Decoder, Encoder, KeyIn, ProviderIo, Upstream, Whole};
+use respan_gateway_http::http::{HeaderValue, request::Parts as RequestHead};
+use respan_gateway_http::{Connect, Encoder, KeyIn, ProviderIo, Upstream, Whole};
 use respan_gateway_media::transcription::{Input, Output, Task, Transcript};
 use serde_json::{Map, Value, json};
 
@@ -72,31 +69,9 @@ impl Format<ProviderIo, Output, Input> for GeminiTranscriptions {
     }
 
     fn bind(&self, io: ProviderIo) -> Result<Connection<Output, Input>, Fault> {
-        Ok(dialect::bind(*self, io))
-    }
-}
-
-/// Its spec's parts, which a vendor's dialect runs around.
-impl Spec for GeminiTranscriptions {
-    type Input = Input;
-    type Output = Output;
-    const NAME: &'static str = NAME;
-
-    fn post(
-        &self,
-        head: &mut RequestHead,
-        input: &Input,
-        _: bool,
-    ) -> Result<Box<dyn Encoder<Input>>, Fault> {
-        call(head, input)
-    }
-
-    fn read_response(
-        &self,
-        _: &ResponseHead,
-        _: &http::Request<Bytes>,
-    ) -> Option<Box<dyn Decoder<Output>>> {
-        Some(Box::new(Whole::new(read_response)))
+        Ok(bind_provider(io, NAME, call, |_, _| {
+            Some(Box::new(Whole::new(read_response)))
+        }))
     }
 }
 
@@ -207,6 +182,7 @@ mod tests {
     use respan_gateway_conversation::Media;
     use respan_gateway_conversation_http::fields::native_of;
     use respan_gateway_core::NativeFields;
+    use respan_gateway_http::http;
 
     fn input() -> Input {
         let mut input = Input::new(Media::new(
