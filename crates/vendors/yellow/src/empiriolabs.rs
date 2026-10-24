@@ -1,30 +1,33 @@
 //! EmpirioLabs AI: Chat Completions, Responses, Messages, the Gemini API,
 //! images, embeddings, speech and decisions, as OpenAI, Anthropic, Google
-//! and Respan serve them, images and speech in its dialects, and its own
-//! transcription and video APIs, which answer as jobs.
+//! and Respan serve them, images in its dialect and speech a format of its
+//! own of OpenAI's name, and its own transcription and video APIs, which
+//! answer as jobs.
 
 use base64::Engine as _;
 use respan_gateway_conversation::{Media, MediaSource};
 use respan_gateway_conversation_http::anthropic::AnthropicMessages;
-use respan_gateway_conversation_http::fields::{kept, native_of};
+use respan_gateway_conversation_http::fields::{kept, merge_missing, native_of, set};
 use respan_gateway_conversation_http::gemini::GeminiGenerate;
 use respan_gateway_conversation_http::openai::OpenAiChat;
+use respan_gateway_conversation_http::read_provider_error;
 use respan_gateway_conversation_http::responses::OpenAiResponses;
-use respan_gateway_core::{Fault, Filter};
+use respan_gateway_core::{Connection, Fault, Filter, Format, Provider};
 use respan_gateway_decision_http::Decisions;
 use respan_gateway_http::bytes::Bytes;
 use respan_gateway_http::content;
 use respan_gateway_http::http::header::{CONTENT_TYPE, HeaderValue};
-use respan_gateway_http::http::{request::Parts as RequestHead, response::Parts as ResponseHead};
-use respan_gateway_http::{Decoder, Sse};
+use respan_gateway_http::http::request::Parts as RequestHead;
+use respan_gateway_http::path::set_path;
+use respan_gateway_http::{Decoder, Encoder, ProviderIo, Sse};
 use respan_gateway_media::{image, speech};
 use respan_gateway_media_http::empiriolabs::{EmpirioLabsTranscriptions, EmpirioLabsVideos};
 use respan_gateway_media_http::openai::{OpenAiEmbeddings, OpenAiImages, OpenAiSpeech};
 use serde_json::{Map, Value};
 
 use respan_gateway_vendor_kit::{
-    Body, BoxFuture, Capability, Dialect, Dialected, Modality, Model, Models, Price, Rewrite,
-    Vendor, VendorProvider, built_wrong, http, json, models, time,
+    Body, BoxFuture, Capability, Connect, Dialect, Dialected, Modality, Model, Models, Price,
+    Rewrite, Upstream, Vendor, VendorProvider, built_wrong, http, json, models, time,
 };
 
 /// Where its API is.
@@ -50,10 +53,7 @@ pub const VENDOR: Vendor = Vendor {
             Some(BASE_URL),
         ),
         (&OpenAiEmbeddings, Some(BASE_URL)),
-        (
-            &Dialected::new(OpenAiSpeech, EmpirioLabsSpeech),
-            Some(BASE_URL),
-        ),
+        (&EmpirioLabsSpeech, Some(BASE_URL)),
         (&EmpirioLabsTranscriptions, Some(BASE_URL)),
         (&EmpirioLabsVideos, Some(BASE_URL)),
         (&Decisions, Some(BASE_URL)),
@@ -83,7 +83,7 @@ impl Dialect for EmpirioLabsImages {
     }
 
     fn request(&self, _: &mut RequestHead) -> Result<Option<Rewrite>, Fault> {
-        Ok(Some(unstreamed("stream")))
+        Ok(Some(Box::new(unstreamed)))
     }
 }
 
@@ -119,46 +119,88 @@ fn linked(media: &Media) -> String {
     }
 }
 
-/// EmpirioLabs AI's speech, as it departs from OpenAI's: its
-/// `/audio/speech` answers the audio at a URL of its storage, so it is
-/// called at `/audio/speech:stream`, of the models that list that endpoint,
-/// and is not asked for OpenAI's events; a client that asked still gets a
-/// stream, framed at the client edge. Its stream is read whole, its
-/// `audio.chunk` events the audio, its `audio.error` a fault, and its
-/// `audio.done` the end, without which it fails `truncated`; its
-/// timestamps are dropped. It streams at no `speed`, which fails
-/// `bad_request` before sending, and no `wav`, which it refuses.
+/// EmpirioLabs AI's speech: OpenAI's JSON, called at
+/// `/audio/speech:stream`, as its `/audio/speech` answers the audio at a
+/// URL of its storage, of the models that list that endpoint. Its stream is
+/// read as it comes, its `audio.chunk` events [`speech::Output::Audio`],
+/// its `audio.error` a fault, and its `audio.done` the end, without which
+/// it fails `truncated`; its timestamps are dropped. An answer of audio is
+/// read as it is. It is not asked for OpenAI's events (`stream_format`); a
+/// client that asked still gets a stream, framed at the client edge. It
+/// streams at no `speed`, which fails `bad_request` before sending, and no
+/// `wav`, which it refuses. A format of OpenAI speech's name, so a client
+/// of OpenAI's is relayed to it.
 #[derive(Debug, Clone, Copy)]
 pub struct EmpirioLabsSpeech;
 
-impl Dialect for EmpirioLabsSpeech {
-    type Input = speech::Input;
-    type Output = speech::Output;
-
-    fn inputs(&self) -> Option<Box<dyn Filter<speech::Input>>> {
-        Some(Box::new(taken_speech))
+impl Upstream for EmpirioLabsSpeech {
+    fn name(&self) -> &str {
+        OpenAiSpeech::NAME
     }
 
-    fn request(&self, head: &mut RequestHead) -> Result<Option<Rewrite>, Fault> {
-        let path = format!("{}:stream", head.uri.path());
-        head.uri = path
-            .parse()
-            .map_err(|e| Fault::internal("a call's path is no path").with_source(e))?;
-        Ok(Some(unstreamed("stream_format")))
-    }
-
-    fn response(&self, _: &RequestHead, head: &mut ResponseHead) -> Option<Rewrite> {
-        if !content::is_stream(head) {
-            return None;
-        }
-        let audio = HeaderValue::from_static("application/octet-stream");
-        head.headers.insert(CONTENT_TYPE, audio);
-        Some(Box::new(streamed_audio))
+    fn provider(&self, name: String, connect: Connect) -> Provider {
+        Provider::new(name, *self, move |x| connect(x))
     }
 }
 
+impl Format<ProviderIo, speech::Output, speech::Input> for EmpirioLabsSpeech {
+    fn name(&self) -> &str {
+        OpenAiSpeech::NAME
+    }
+
+    /// The call of its one input, its answer read as it streams.
+    fn bind(&self, io: ProviderIo) -> Result<Connection<speech::Output, speech::Input>, Fault> {
+        Ok(io.with_refusal(read_provider_error).bind(
+            |head, input: Option<&speech::Input>| {
+                let input = input.ok_or_else(|| {
+                    Fault::config("EmpirioLabs AI speech does not accept streaming inputs")
+                })?;
+                let body = speech_call(head, input)?;
+                let send = move |_: &speech::Input, out: &mut Vec<Bytes>| {
+                    out.push(body.clone());
+                    Ok(())
+                };
+                Ok(Box::new(send) as Box<dyn Encoder<speech::Input>>)
+            },
+            |head, _| {
+                if content::is_stream(head) {
+                    let events = Sse::new(Streamed::default());
+                    return Some(Box::new(events) as Box<dyn Decoder<speech::Output>>);
+                }
+                let audio = |bytes: Bytes, out: &mut Vec<speech::Output>| -> Result<(), Fault> {
+                    out.push(speech::Output::Audio(bytes));
+                    Ok(())
+                };
+                Some(Box::new(audio) as Box<dyn Decoder<speech::Output>>)
+            },
+        ))
+    }
+}
+
+/// The body of a speech call of `input`, its head a `POST` of JSON to
+/// `/audio/speech:stream`.
+fn speech_call(head: &mut RequestHead, input: &speech::Input) -> Result<Bytes, Fault> {
+    taken_speech(input)?;
+    head.method = http::Method::POST;
+    set_path(head, "/audio/speech:stream")?;
+    let json = HeaderValue::from_static("application/json");
+    head.headers.insert(CONTENT_TYPE, json);
+    let mut v = Map::new();
+    set(&mut v, "model", input.model.clone());
+    v.insert("input".into(), input.text.clone().into());
+    set(&mut v, "voice", input.voice.clone());
+    set(&mut v, "instructions", input.instructions.clone());
+    set(&mut v, "response_format", input.audio_format.clone());
+    let mut native = kept(OpenAiSpeech::NAME, &input.native)?;
+    native.shift_remove("stream_format");
+    merge_missing(&mut v, &native);
+    let body = serde_json::to_vec(&v)
+        .map_err(|e| Fault::internal("a speech call could not be written").with_source(e))?;
+    Ok(Bytes::from(body))
+}
+
 /// `input` as it streams speech: at no `speed`.
-fn taken_speech(input: &mut speech::Input) -> Result<(), Fault> {
+fn taken_speech(input: &speech::Input) -> Result<(), Fault> {
     if input.speed.is_some() {
         return Err(Fault::bad_request(
             "EmpirioLabs AI streams no speech at a 'speed'",
@@ -167,33 +209,16 @@ fn taken_speech(input: &mut speech::Input) -> Result<(), Fault> {
     Ok(())
 }
 
-/// A call's JSON without its `field`, which asks for a stream.
-fn unstreamed(field: &'static str) -> Rewrite {
-    Box::new(move |body: Bytes| {
-        let unwritten = |e| Fault::internal("a call is no JSON object").with_source(e);
-        let mut call: Map<String, Value> = serde_json::from_slice(&body).map_err(unwritten)?;
-        if call.shift_remove(field).is_none() {
-            return Ok(body);
-        }
-        serde_json::to_vec(&call)
-            .map(Bytes::from)
-            .map_err(unwritten)
-    })
-}
-
-/// The audio of a whole stream of its speech's events.
-fn streamed_audio(raw: Bytes) -> Result<Bytes, Fault> {
-    let mut events = Sse::new(Streamed::default());
-    let mut out = Vec::new();
-    events.decode(raw, &mut out)?;
-    events.end(Ok(()), &mut out)?;
-    let mut audio = Vec::new();
-    for output in out {
-        if let speech::Output::Audio(bytes) = output {
-            audio.extend_from_slice(&bytes);
-        }
+/// A call's JSON without its `stream`.
+fn unstreamed(body: Bytes) -> Result<Bytes, Fault> {
+    let unwritten = |e| Fault::internal("a call is no JSON object").with_source(e);
+    let mut call: Map<String, Value> = serde_json::from_slice(&body).map_err(unwritten)?;
+    if call.shift_remove("stream").is_none() {
+        return Ok(body);
     }
-    Ok(Bytes::from(audio))
+    serde_json::to_vec(&call)
+        .map(Bytes::from)
+        .map_err(unwritten)
 }
 
 /// Its speech's events, and whether one said their end.
@@ -538,14 +563,15 @@ mod tests {
     #[test]
     fn speech_is_asked_for_as_a_stream() {
         let mut head = http::Request::new(()).into_parts().0;
-        head.uri = "/audio/speech".parse().expect("path");
-        let rewrite = EmpirioLabsSpeech.request(&mut head).expect("taken");
+        let mut input = speech::Input::new("Hi.");
+        let mut asked = serde_json::Map::new();
+        asked.insert("stream_format".into(), "sse".into());
+        input.native = Some(NativeFields::new(OpenAiSpeech::NAME, asked));
+        let call = speech_call(&mut head, &input).expect("a call");
         assert_eq!(head.uri.path(), "/audio/speech:stream");
-        let call = Bytes::from_static(br#"{"input":"Hi.","stream_format":"sse"}"#);
-        let call = rewrite.expect("a rewrite")(call).expect("a call");
         assert_eq!(call, &br#"{"input":"Hi."}"#[..]);
         let mut fast = speech::Input::new("Hi.");
         fast.speed = Some(1.5);
-        assert!(taken_speech(&mut fast).is_err());
+        assert!(speech_call(&mut head, &fast).is_err());
     }
 }
