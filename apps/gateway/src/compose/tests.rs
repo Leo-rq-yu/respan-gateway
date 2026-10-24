@@ -356,7 +356,10 @@ fn bedrock_is_called_at_its_regions_runtime_and_serves_no_client() {
         .map(|e| (e.format.as_str(), e.base_url.as_str()))
         .collect();
     let runtime = "https://bedrock-runtime.eu-west-1.amazonaws.com";
-    assert_eq!(entries, [("bedrock-embeddings", runtime)]);
+    assert_eq!(
+        entries,
+        [("bedrock-embeddings", runtime), ("bedrock-images", runtime)]
+    );
     let parts = aws.provider.parts().unwrap_or_default();
     let auth = parts.first().and_then(|p| p.headers.get("authorization"));
     assert_eq!(auth.and_then(|v| v.to_str().ok()), Some("Bearer k"));
