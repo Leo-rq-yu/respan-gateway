@@ -4,9 +4,8 @@
 use std::time::Duration;
 
 use super::{is_segment, job_path};
-use crate::dialect::Spec;
 use crate::edge::{bind_provider, sends};
-use crate::openai::{OpenAiTranscriptions, read_transcript};
+use crate::openai::{post_transcription, read_transcript};
 use futures::{FutureExt, SinkExt, TryStreamExt, stream};
 use respan_gateway_conversation::{Media, MediaSource};
 use respan_gateway_core::{
@@ -97,7 +96,7 @@ impl Format<ProviderIo, Output, Input> for Polled {
                     return Err(Fault::bad_request("EmpirioLabs AI cannot translate audio")
                         .with(ErrorCode("unsupported".into())));
                 }
-                OpenAiTranscriptions.post(head, input, false)
+                post_transcription(head, input, false)
             },
             |_, _| Some(answer()),
         );

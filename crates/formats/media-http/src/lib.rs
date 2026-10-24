@@ -7,10 +7,10 @@
 //!   them, of the video and image kinds.
 //! - [`empiriolabs`]: EmpirioLabs AI's video and transcription APIs, which
 //!   answer as jobs, providers of those kinds.
-//! - [`dialect`]: a format as a vendor speaks it, its departures from the
-//!   spec in the vendor's [`Dialect`](dialect::Dialect).
+//!
+//! A vendor's departures from one of them are its dialect of it, laid over
+//! it ([`respan_gateway_http::dialect`]).
 
-pub mod dialect;
 mod edge;
 pub mod empiriolabs;
 pub mod gemini;

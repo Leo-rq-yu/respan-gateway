@@ -3,8 +3,6 @@
 //! and Respan serve them, images and speech in its dialects, and its own
 //! transcription and video APIs, which answer as jobs.
 
-use std::borrow::Cow;
-
 use base64::Engine as _;
 use respan_gateway_conversation::{Media, MediaSource};
 use respan_gateway_conversation_http::anthropic::AnthropicMessages;
@@ -12,21 +10,21 @@ use respan_gateway_conversation_http::fields::{kept, native_of};
 use respan_gateway_conversation_http::gemini::GeminiGenerate;
 use respan_gateway_conversation_http::openai::OpenAiChat;
 use respan_gateway_conversation_http::responses::OpenAiResponses;
-use respan_gateway_core::Fault;
+use respan_gateway_core::{Fault, Filter};
 use respan_gateway_decision_http::Decisions;
 use respan_gateway_http::bytes::Bytes;
 use respan_gateway_http::content;
+use respan_gateway_http::http::header::{CONTENT_TYPE, HeaderValue};
 use respan_gateway_http::http::{request::Parts as RequestHead, response::Parts as ResponseHead};
 use respan_gateway_http::{Decoder, Sse};
 use respan_gateway_media::{image, speech};
-use respan_gateway_media_http::dialect::{Dialect, Dialected};
 use respan_gateway_media_http::empiriolabs::{EmpirioLabsTranscriptions, EmpirioLabsVideos};
 use respan_gateway_media_http::openai::{OpenAiEmbeddings, OpenAiImages, OpenAiSpeech};
-use serde_json::Value;
+use serde_json::{Map, Value};
 
 use respan_gateway_vendor_kit::{
-    Body, BoxFuture, Capability, Modality, Model, Models, Price, Vendor, VendorProvider,
-    built_wrong, http, json, models, time,
+    Body, BoxFuture, Capability, Dialect, Dialected, Modality, Model, Models, Price, Rewrite,
+    Vendor, VendorProvider, built_wrong, http, json, models, time,
 };
 
 /// Where its API is.
@@ -47,9 +45,15 @@ pub const VENDOR: Vendor = Vendor {
         (&OpenAiResponses, Some(BASE_URL)),
         (&AnthropicMessages, Some(MESSAGES_URL)),
         (&GeminiGenerate, Some(GEMINI_URL)),
-        (&Dialected::new(OpenAiImages, EmpirioLabs), Some(BASE_URL)),
+        (
+            &Dialected::new(OpenAiImages, EmpirioLabsImages),
+            Some(BASE_URL),
+        ),
         (&OpenAiEmbeddings, Some(BASE_URL)),
-        (&Dialected::new(OpenAiSpeech, EmpirioLabs), Some(BASE_URL)),
+        (
+            &Dialected::new(OpenAiSpeech, EmpirioLabsSpeech),
+            Some(BASE_URL),
+        ),
         (&EmpirioLabsTranscriptions, Some(BASE_URL)),
         (&EmpirioLabsVideos, Some(BASE_URL)),
         (&Decisions, Some(BASE_URL)),
@@ -58,50 +62,49 @@ pub const VENDOR: Vendor = Vendor {
     ..Vendor::DEFAULT
 };
 
-/// EmpirioLabs AI's images and speech, as it departs from OpenAI's.
-///
-/// Images: it answers a job unless asked to wait (`sync`), and an image at
-/// a signed URL of its own storage unless asked for its bytes: it is asked
-/// for both, unless the request says otherwise. An edit is a generation of
-/// its `image`s, each a URL or a data URL of its bytes; it takes no mask,
-/// which fails `bad_request` before sending. One it did not finish within
-/// its wait, about four minutes, it answers as a job, which fails. It
-/// streams no images: a client that asked still gets a stream, framed at
-/// the client edge.
-///
-/// Speech: its `/audio/speech` answers the audio at a URL of its storage,
-/// so it is called at `/audio/speech:stream`, which streams it, of the
-/// models that list that endpoint. Its `audio.chunk` events are
-/// [`speech::Output::Audio`], its `audio.error` a fault, and its
-/// `audio.done` the end, without which the stream fails `truncated`; its
-/// timestamps are dropped. It streams at no `speed`, which fails
-/// `bad_request` before sending, and no `wav`, which it refuses.
+/// EmpirioLabs AI's images, as it departs from OpenAI's: it answers a job
+/// unless asked to wait (`sync`), and an image at a signed URL of its own
+/// storage unless asked for its bytes: it is asked for both, unless the
+/// request says otherwise. An edit is a generation of its `image`s, each a
+/// URL or a data URL of its bytes; it takes no mask, which fails
+/// `bad_request` before sending. One it did not finish within its wait,
+/// about four minutes, it answers as a job, which fails. It streams no
+/// images, so it is not asked to; a client that asked still gets a stream,
+/// framed at the client edge.
 #[derive(Debug, Clone, Copy)]
-pub struct EmpirioLabs;
+pub struct EmpirioLabsImages;
 
-impl Dialect<image::Input, image::Output> for EmpirioLabs {
-    fn input<'a>(&self, input: &'a image::Input) -> Result<Cow<'a, image::Input>, Fault> {
-        if input.mask.is_some() {
-            return Err(Fault::bad_request(
-                "EmpirioLabs AI edits an image with no mask",
-            ));
-        }
-        let mut fields = kept(OpenAiImages::NAME, &input.native)?;
-        fields.entry("sync").or_insert(true.into());
-        fields.entry("response_format").or_insert("b64_json".into());
-        if !input.images.is_empty() {
-            let images = input.images.iter().map(|m| Value::from(linked(m)));
-            fields.insert("image".into(), images.collect::<Vec<_>>().into());
-        }
-        let mut input = input.clone();
-        input.images.clear();
-        input.native = native_of(OpenAiImages::NAME, fields);
-        Ok(Cow::Owned(input))
+impl Dialect for EmpirioLabsImages {
+    type Input = image::Input;
+    type Output = image::Output;
+
+    fn inputs(&self) -> Option<Box<dyn Filter<image::Input>>> {
+        Some(Box::new(taken_image))
     }
 
-    fn streams(&self, _: bool) -> bool {
-        false
+    fn request(&self, _: &mut RequestHead) -> Result<Option<Rewrite>, Fault> {
+        Ok(Some(unstreamed("stream")))
     }
+}
+
+/// `input` as it takes an image call: waited for, as bytes, its images
+/// named in its `image`, and no mask.
+fn taken_image(input: &mut image::Input) -> Result<(), Fault> {
+    if input.mask.is_some() {
+        return Err(Fault::bad_request(
+            "EmpirioLabs AI edits an image with no mask",
+        ));
+    }
+    let mut fields = kept(OpenAiImages::NAME, &input.native)?;
+    fields.entry("sync").or_insert(true.into());
+    fields.entry("response_format").or_insert("b64_json".into());
+    if !input.images.is_empty() {
+        let images = input.images.iter().map(|m| Value::from(linked(m)));
+        fields.insert("image".into(), images.collect::<Vec<_>>().into());
+    }
+    input.images.clear();
+    input.native = native_of(OpenAiImages::NAME, fields);
+    Ok(())
 }
 
 /// An image as it takes one: its URL, or a data URL of its bytes.
@@ -116,32 +119,81 @@ fn linked(media: &Media) -> String {
     }
 }
 
-impl Dialect<speech::Input, speech::Output> for EmpirioLabs {
-    fn input<'a>(&self, input: &'a speech::Input) -> Result<Cow<'a, speech::Input>, Fault> {
-        if input.speed.is_some() {
-            return Err(Fault::bad_request(
-                "EmpirioLabs AI streams no speech at a 'speed'",
-            ));
-        }
-        Ok(Cow::Borrowed(input))
+/// EmpirioLabs AI's speech, as it departs from OpenAI's: its
+/// `/audio/speech` answers the audio at a URL of its storage, so it is
+/// called at `/audio/speech:stream`, of the models that list that endpoint,
+/// and is not asked for OpenAI's events; a client that asked still gets a
+/// stream, framed at the client edge. Its stream is read whole, its
+/// `audio.chunk` events the audio, its `audio.error` a fault, and its
+/// `audio.done` the end, without which it fails `truncated`; its
+/// timestamps are dropped. It streams at no `speed`, which fails
+/// `bad_request` before sending, and no `wav`, which it refuses.
+#[derive(Debug, Clone, Copy)]
+pub struct EmpirioLabsSpeech;
+
+impl Dialect for EmpirioLabsSpeech {
+    type Input = speech::Input;
+    type Output = speech::Output;
+
+    fn inputs(&self) -> Option<Box<dyn Filter<speech::Input>>> {
+        Some(Box::new(taken_speech))
     }
 
-    fn call(&self, head: &mut RequestHead) -> Result<(), Fault> {
+    fn request(&self, head: &mut RequestHead) -> Result<Option<Rewrite>, Fault> {
         let path = format!("{}:stream", head.uri.path());
         head.uri = path
             .parse()
             .map_err(|e| Fault::internal("a call's path is no path").with_source(e))?;
-        Ok(())
+        Ok(Some(unstreamed("stream_format")))
     }
 
-    fn read_response(&self, head: &ResponseHead) -> Option<Box<dyn Decoder<speech::Output>>> {
-        let stream = content::is_stream(head) && head.status.is_success();
-        stream.then(|| Box::new(Sse::new(Streamed::default())) as _)
+    fn response(&self, _: &RequestHead, head: &mut ResponseHead) -> Option<Rewrite> {
+        if !content::is_stream(head) {
+            return None;
+        }
+        let audio = HeaderValue::from_static("application/octet-stream");
+        head.headers.insert(CONTENT_TYPE, audio);
+        Some(Box::new(streamed_audio))
     }
+}
 
-    fn streams(&self, _: bool) -> bool {
-        false
+/// `input` as it streams speech: at no `speed`.
+fn taken_speech(input: &mut speech::Input) -> Result<(), Fault> {
+    if input.speed.is_some() {
+        return Err(Fault::bad_request(
+            "EmpirioLabs AI streams no speech at a 'speed'",
+        ));
     }
+    Ok(())
+}
+
+/// A call's JSON without its `field`, which asks for a stream.
+fn unstreamed(field: &'static str) -> Rewrite {
+    Box::new(move |body: Bytes| {
+        let unwritten = |e| Fault::internal("a call is no JSON object").with_source(e);
+        let mut call: Map<String, Value> = serde_json::from_slice(&body).map_err(unwritten)?;
+        if call.shift_remove(field).is_none() {
+            return Ok(body);
+        }
+        serde_json::to_vec(&call)
+            .map(Bytes::from)
+            .map_err(unwritten)
+    })
+}
+
+/// The audio of a whole stream of its speech's events.
+fn streamed_audio(raw: Bytes) -> Result<Bytes, Fault> {
+    let mut events = Sse::new(Streamed::default());
+    let mut out = Vec::new();
+    events.decode(raw, &mut out)?;
+    events.end(Ok(()), &mut out)?;
+    let mut audio = Vec::new();
+    for output in out {
+        if let speech::Output::Audio(bytes) = output {
+            audio.extend_from_slice(&bytes);
+        }
+    }
+    Ok(Bytes::from(audio))
 }
 
 /// Its speech's events, and whether one said their end.
@@ -417,8 +469,8 @@ mod tests {
             "image/png",
             MediaSource::Url("https://x.test/a.png".into()),
         ));
-        let sent =
-            Dialect::<image::Input, image::Output>::input(&EmpirioLabs, &edit).expect("taken");
+        let mut sent = edit.clone();
+        taken_image(&mut sent).expect("taken");
         assert!(
             sent.images.is_empty(),
             "an edit is a generation of its images"
@@ -439,9 +491,8 @@ mod tests {
         let mut asked = serde_json::Map::new();
         asked.insert("response_format".into(), "url".into());
         urls.native = Some(NativeFields::new(OpenAiImages::NAME, asked));
-        let sent =
-            Dialect::<image::Input, image::Output>::input(&EmpirioLabs, &urls).expect("taken");
-        let fields = sent
+        taken_image(&mut urls).expect("taken");
+        let fields = urls
             .native
             .as_ref()
             .map(|n| n.fields.clone())
@@ -450,7 +501,7 @@ mod tests {
 
         let mut masked = edit.clone();
         masked.mask = Some(edit.images[0].clone());
-        assert!(Dialect::<image::Input, image::Output>::input(&EmpirioLabs, &masked).is_err());
+        assert!(taken_image(&mut masked).is_err());
     }
 
     fn spoken(body: &str) -> Result<Vec<Bytes>, Fault> {
@@ -488,10 +539,13 @@ mod tests {
     fn speech_is_asked_for_as_a_stream() {
         let mut head = http::Request::new(()).into_parts().0;
         head.uri = "/audio/speech".parse().expect("path");
-        Dialect::<speech::Input, speech::Output>::call(&EmpirioLabs, &mut head).expect("taken");
+        let rewrite = EmpirioLabsSpeech.request(&mut head).expect("taken");
         assert_eq!(head.uri.path(), "/audio/speech:stream");
+        let call = Bytes::from_static(br#"{"input":"Hi.","stream_format":"sse"}"#);
+        let call = rewrite.expect("a rewrite")(call).expect("a call");
+        assert_eq!(call, &br#"{"input":"Hi."}"#[..]);
         let mut fast = speech::Input::new("Hi.");
         fast.speed = Some(1.5);
-        assert!(Dialect::<speech::Input, speech::Output>::input(&EmpirioLabs, &fast).is_err());
+        assert!(taken_speech(&mut fast).is_err());
     }
 }

@@ -54,14 +54,9 @@ version, as OpenAI's SDKs take it: `https://api.openai.com/v1`,
 Vendors' fields the kind has no form for (Groq's `x_groq`, Together's
 `steps`) stay native, so a relay in the same format keeps them.
 
-`dialect::{Spec, Dialect, Dialected}`: a format as a vendor speaks it.
-`OpenAiImages`, `OpenAiTranscriptions` and `OpenAiSpeech` are `Spec`s,
-their provider edges in parts; a vendor's `Dialect` says what it takes and
-answers beyond the spec (its input before the spec writes it, the path it
-takes the call at, how its answer is read, whether it streams, where its
-key goes), and `Dialected::new(spec, dialect)` is a
-provider format of the spec's name, so a client of the spec is still
-relayed to it.
+A vendor's departures from one of these formats are its dialect of it,
+laid over the format (`respan_gateway_http::dialect::Dialected`), so a
+client of the spec is still relayed to it.
 
 `empiriolabs::{EmpirioLabsTranscriptions, EmpirioLabsVideos}`, named
 `empiriolabs-transcriptions` and `empiriolabs-videos`: EmpirioLabs AI's
