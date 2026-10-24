@@ -36,5 +36,6 @@ pub const ALL: &[&Vendor] = &[
     &cerebras::VENDOR,
     &perplexity::VENDOR,
     &vertex::VENDOR,
+    &vertex::EXPRESS,
     &deepinfra::VENDOR,
 ];
