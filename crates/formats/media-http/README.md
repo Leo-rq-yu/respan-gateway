@@ -140,20 +140,29 @@ a Bedrock API key as a bearer token.
   inference profile's id (`us.cohere.embed-v4:0`) is its model as it is.
 - Cohere Embed (`cohere.embed-*`) embeds every text in one call:
   `{texts, input_type, embedding_types: ["float"]}`, `input_type` the
-  client's (an `openai-embeddings` field) or `search_document`; its v4 takes
-  `dimensions` as `output_dimension`.
-- Titan Embeddings (`amazon.titan-embed-text-*`,
-  `amazon.titan-embed-image-v1`) embeds one text per call, so a request of
-  several texts is as many calls, a few at a time, one attempt of the
-  provider's: its vectors are the texts' in order, its usage theirs
-  together. Text v2 takes `dimensions` as it is, the multimodal model as
-  `embeddingConfig.outputEmbeddingLength`.
+  client's (an `openai-embeddings` field) or `search_document`; an item of
+  parts is one input, v3's one image (`images`), v4's texts and images
+  together (`inputs`); v4 takes `dimensions` as `output_dimension`.
+- The others embed one input per call, so a request of several is as many
+  calls, a few at a time, one attempt of the provider's: its vectors are
+  the inputs' in order, its usage theirs together. Titan Text
+  (`amazon.titan-embed-text-*`) embeds a text, v2 with `dimensions`;
+  Titan Multimodal (`amazon.titan-embed-image-v1`) a text, an image or the
+  two, `dimensions` as `embeddingConfig.outputEmbeddingLength`; Nova
+  Multimodal Embeddings (`amazon.nova-2-multimodal-embeddings-v1:0`) each
+  text and each part, a text, image, audio or video, `dimensions` as
+  `embeddingDimension` and the client's `input_type` as
+  `embeddingPurpose` (`GENERIC_INDEX` unless it says); Marengo Embed 3.0
+  (`twelvelabs.marengo-embed-3-0-v1:0`) a text, an image or the two.
+- A part's media is a base64 data URL, `{"type": "image", "url":
+  "data:image/png;base64,..."}`: Bedrock takes media as bytes.
 - Vectors are asked for as floats; the client's `encoding_format` is the
   client edge's. Usage is the input tokens Bedrock counts: Titan's
   `inputTextTokenCount`, else the `x-amzn-bedrock-input-token-count`
-  header, Cohere's only count.
-- Texts alone: token ids, parts, a `dimensions` the model does not take and
-  fields of another format are refused, 400, before any call.
+  header.
+- Token ids, media by URL, parts a model does not read, a `dimensions` it
+  does not take and fields of another format are refused, 400, before any
+  call.
 
 `bedrock::BedrockImages`, named `bedrock-images`: Amazon Bedrock's
 InvokeModel for Stability AI images, a provider of the image kind, at the

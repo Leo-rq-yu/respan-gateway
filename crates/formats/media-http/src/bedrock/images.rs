@@ -79,6 +79,12 @@ pub struct BedrockImages;
 impl BedrockImages {
     /// The format's name, `bedrock-images`.
     pub const NAME: &'static str = NAME;
+
+    /// Whether it draws with `model`, a model's id or an inference
+    /// profile's.
+    pub fn draws(model: &str) -> bool {
+        Family::of(model).is_some()
+    }
 }
 
 /// A bearer key, over HTTP, beside its base URL.
