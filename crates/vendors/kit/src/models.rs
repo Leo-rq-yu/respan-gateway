@@ -56,6 +56,9 @@ const TYPES: &[(&str, &str)] = &[
     ("image", "image"),
     ("embedding", "embedding"),
     ("rerank", "rerank"),
+    ("audio", "speech"),
+    ("transcribe", "transcription"),
+    ("video", "video"),
     ("moderation", "moderation"),
 ];
 
@@ -220,6 +223,9 @@ mod tests {
             { "id": "BAAI/bge-base-en-v1.5", "type": "embedding" },
             { "id": "black-forest-labs/FLUX.1-schnell", "type": "image" },
             { "id": "Qwen/Qwen3-Coder", "type": "code" },
+            { "id": "cartesia/sonic-3", "type": "audio" },
+            { "id": "openai/whisper-large-v3", "type": "transcribe" },
+            { "id": "minimax/hailuo-02", "type": "video" },
             { "id": "anthropic-like", "type": "model" },
         ]);
         let kinds: Vec<_> = listed(&answer).into_iter().map(|m| m.kind).collect();
@@ -231,6 +237,9 @@ mod tests {
                 said("embedding"),
                 said("image"),
                 said("chat"),
+                said("speech"),
+                said("transcription"),
+                said("video"),
                 None
             ]
         );
