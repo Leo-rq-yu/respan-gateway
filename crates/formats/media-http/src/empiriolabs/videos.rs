@@ -1,7 +1,7 @@
-//! EmpirioLabs AI's video API over HTTP: a provider format of the
-//! [`video`](respan_gateway_media::video) kind, [`EmpirioLabsVideos`]. A
-//! provider's base URL includes the version, `https://api.empiriolabs.ai/v1`.
+//! EmpirioLabs AI's video API: `POST /videos/generations`, answered as a
+//! job.
 
+use super::{is_segment, job_path};
 use crate::edge::{bind_provider, sends};
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD;
@@ -36,9 +36,9 @@ const PREFIX: &str = "empiriolabs_";
 /// reference image as `image`, a URL or a data URL, and its native fields of
 /// this format as they are.
 ///
-/// A video is served at a URL of the provider's storage, which the
-/// provider's key is never sent to: its content is refused, 400, naming
-/// that it is at the URL its job names. EmpirioLabs AI cannot remix, delete or
+/// A video is only at a signed URL of `media.empiriolabs.ai`, which no path
+/// of its API serves, and a provider's calls all go beside its base URL:
+/// its content is refused, 400, naming that it is at the URL its job names. EmpirioLabs AI cannot remix, delete or
 /// list videos, nor make a thumbnail or a spritesheet: those are refused,
 /// 400, before any call. What it answers beyond the kind is dropped.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -59,12 +59,6 @@ impl EmpirioLabsVideos {
     pub fn provider_id(id: &str) -> Option<&str> {
         id.strip_prefix(PREFIX).filter(|id| is_segment(id))
     }
-}
-
-/// Whether `s` is a path segment that every reader reads as it is.
-fn is_segment(s: &str) -> bool {
-    let plain = |c: char| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.');
-    !s.is_empty() && s != "." && s != ".." && s.chars().all(plain)
 }
 
 /// Its spec's: a bearer key, over HTTP, beside its base URL.
@@ -108,7 +102,7 @@ fn call(head: &mut RequestHead, input: &Input) -> Result<Box<dyn Encoder<Input>>
             "/videos/generations".to_owned(),
             Some(create_body(create)?),
         ),
-        Input::Retrieve { id } => (Method::GET, format!("/jobs/{}", provider_id(id)?), None),
+        Input::Retrieve { id } => (Method::GET, job_path(provider_id(id)?), None),
         Input::Content { id, variant, .. } => {
             if *variant != Variant::Video {
                 return Err(unsupported("make a thumbnail or a spritesheet"));
