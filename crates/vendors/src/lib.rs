@@ -16,9 +16,9 @@
 //! is the spec's, in its format.
 
 pub use respan_gateway_vendor_kit::{
-    Body, BoxFuture, Capability, Connect, FORMATS, HttpTransport, KeyIn, ListModels, Modality,
-    Model, Models, Network, Part, Price, Reach, Upstream, Vendor, VendorProvider, built_wrong,
-    chat, format, http, json, located, models, time,
+    Body, BoxFuture, Capability, Connect, FORMATS, HttpTransport, KeyIn, ListModels, Locate,
+    Modality, Model, Models, Network, Part, Price, Reach, Upstream, Vendor, VendorProvider,
+    built_wrong, chat, format, http, json, located, models, time,
 };
 
 pub use respan_gateway_vendors_green::{anthropic, gemini, openai, respan, typesafe};
@@ -53,6 +53,7 @@ pub const ALL: &[&Vendor] = &[
     &cerebras::VENDOR,
     &perplexity::VENDOR,
     &vertex::VENDOR,
+    &vertex::EXPRESS,
     &deepinfra::VENDOR,
     &respan::VENDOR,
 ];
