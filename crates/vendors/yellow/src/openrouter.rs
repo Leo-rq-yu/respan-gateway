@@ -1,5 +1,6 @@
-//! OpenRouter: Chat Completions, embeddings, transcriptions, speech, images
-//! and videos, for many vendors' models; speech and images in its dialect.
+//! OpenRouter: Chat Completions, embeddings, transcriptions, speech, images,
+//! videos and decisions, for many vendors' models; speech, images and
+//! decisions in its dialect.
 
 use std::borrow::Cow;
 use std::collections::HashMap;
@@ -12,6 +13,9 @@ use respan_gateway_conversation_http::fields::{kept, native_of};
 use respan_gateway_conversation_http::openai::OpenAiChat;
 use respan_gateway_core::NativeValue;
 use respan_gateway_core::{Fault, Filter};
+use respan_gateway_decision_http::Decisions;
+use respan_gateway_decision_http::dialect::Dialect as DecisionDialect;
+use respan_gateway_decision_http::dialect::Dialected as DecisionDialected;
 use respan_gateway_http::bytes::Bytes;
 use respan_gateway_http::http::response::Parts as ResponseHead;
 use respan_gateway_http::{Decoder, Whole};
@@ -51,6 +55,10 @@ pub const VENDOR: Vendor = Vendor {
             Some(BASE_URL),
         ),
         (&OpenRouterVideos, Some(BASE_URL)),
+        (
+            &DecisionDialected::new(Decisions, OpenRouterDecisions),
+            Some(BASE_URL),
+        ),
     ],
     models: list_models,
     ..Vendor::DEFAULT
@@ -186,6 +194,17 @@ fn images(raw: Bytes, out: &mut Vec<image::Output>) -> Result<(), Fault> {
     Ok(())
 }
 
+/// OpenRouter's decisions: it serves them as TypeSafe's System One does,
+/// at `/systemone`.
+#[derive(Debug, Clone, Copy)]
+pub struct OpenRouterDecisions;
+
+impl DecisionDialect for OpenRouterDecisions {
+    fn path(&self) -> Option<&'static str> {
+        Some("/systemone")
+    }
+}
+
 /// The kind each of its outputs says a model is, the first it has: one
 /// that writes text chats, whatever else it writes.
 const KINDS: &[(&str, &str)] = &[
@@ -271,6 +290,7 @@ mod tests {
             "openai-speech",
             "openai-images",
             "openrouter-videos",
+            "decisions",
         ];
         for name in names {
             assert!(VENDOR.format(name).is_some(), "{name}");
