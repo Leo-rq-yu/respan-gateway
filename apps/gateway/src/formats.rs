@@ -223,7 +223,7 @@ mod endpoints {
     ];
     pub const SPEECH: &[&str] = &["POST /v1/audio/speech"];
     pub const EMBEDDINGS: &[&str] = &["POST /v1/embeddings"];
-    pub const RERANK: &[&str] = &["POST /v1/rerank"];
+    pub const RERANK: &[&str] = &["POST /v1/rerank", "POST /v2/rerank"];
     pub const DECISIONS: &[&str] = &["POST /v1/decisions", "POST /v1/systemone"];
     pub const VIDEOS: &[&str] = &[
         "POST /v1/videos",
