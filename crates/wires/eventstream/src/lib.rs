@@ -345,6 +345,34 @@ mod tests {
         }
     }
 
+    /// A ConverseStream body as Bedrock sent it (Nova Micro saying hello).
+    const CONVERSE_STREAM: &[u8] = include_bytes!("../testdata/converse-stream.bin");
+
+    #[test]
+    fn bedrocks_converse_stream_splits_at_any_byte_and_writes_back_as_sent() {
+        let kinds = [
+            "messageStart",
+            "contentBlockDelta",
+            "contentBlockDelta",
+            "contentBlockStop",
+            "messageStop",
+            "metadata",
+        ];
+        for cut in 0..=CONVERSE_STREAM.len() {
+            let mut parser = Parser::new(Some(64 * 1024));
+            let mut out = Vec::new();
+            for part in [&CONVERSE_STREAM[..cut], &CONVERSE_STREAM[cut..]] {
+                let messages = parser.push(Bytes::copy_from_slice(part));
+                out.extend(messages.unwrap_or_default());
+            }
+            assert!(parser.finish().is_ok(), "cut at {cut}");
+            let said: Vec<_> = out.iter().map(|m| m.text(":event-type")).collect();
+            assert_eq!(said, kinds.map(Some), "cut at {cut}");
+            let written: Vec<u8> = out.iter().flat_map(|m| m.encode().to_vec()).collect();
+            assert_eq!(written, CONVERSE_STREAM, "cut at {cut}");
+        }
+    }
+
     #[test]
     fn a_damaged_message_or_prelude_fails_its_checksum() {
         let whole = event("one", "{\"a\":1}").encode().to_vec();
