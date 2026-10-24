@@ -905,7 +905,7 @@ async fn vertex_sends_each_model_to_the_api_that_serves_it() {
     let at = format!("{}/v1/projects/p/locations/l", vertex.base);
     let location_at = format!("{}/v1/projects/p/locations/l", location.base);
     let text = format!(
-        "providers = {{ v = {{ vendor = \"vertex\", key = \"tok\", formats = {{ gemini-generate = \"{at}/publishers/google\", anthropic-messages = \"{at}/publishers/anthropic\", openai-chat = \"{location_at}\", openai-embeddings = \"{at}/endpoints/openapi\" }} }} }}\n"
+        "providers = {{ v = {{ vendor = \"vertex\", key = \"tok\", formats = {{ gemini-generate = \"{at}/publishers/google\", gemini-transcriptions = \"{at}/publishers/google\", anthropic-messages = \"{at}/publishers/anthropic\", openai-chat = \"{location_at}\", openai-embeddings = \"{at}/endpoints/openapi\" }} }} }}\n"
     );
     let gateway = resolve(&text).unwrap_or_else(|e| panic!("gateway: {e}"));
     let chat = |model: &str| {
@@ -971,6 +971,23 @@ async fn vertex_sends_each_model_to_the_api_that_serves_it() {
         "/v1/projects/p/locations/l/endpoints/openapi/embeddings"
     );
     assert_eq!(body["model"], "google/gemini-embedding-001");
+    // A transcription is Gemini's `generateContent` of the audio.
+    let form = "--b0\r\nContent-Disposition: form-data; name=\"model\"\r\n\r\ngemini-3.5-transcribe\r\n--b0\r\nContent-Disposition: form-data; name=\"file\"; filename=\"a.wav\"\r\nContent-Type: audio/wav\r\n\r\nRIFF\r\n--b0--\r\n";
+    let mut request = post("/v1/audio/transcriptions", form);
+    let multipart = http::HeaderValue::from_static("multipart/form-data; boundary=b0");
+    request
+        .headers_mut()
+        .insert(http::header::CONTENT_TYPE, multipart);
+    let (response, _) = serve(&gateway, request).await;
+    let (status, _, body) = read_whole(response).await;
+    gateway.idle().await;
+    assert_eq!(status, StatusCode::OK, "{body:?}");
+    let (path, auth, _) = vertex.last();
+    assert_eq!(
+        path,
+        "/v1/projects/p/locations/l/publishers/google/models/gemini-3.5-transcribe:generateContent"
+    );
+    assert_eq!(auth.as_deref(), Some("Bearer tok"));
 }
 
 #[test]
@@ -983,13 +1000,8 @@ fn vertex_express_takes_an_api_key_under_no_project() {
         .iter()
         .map(|e| (e.format.as_str(), e.base_url.as_str()))
         .collect();
-    assert_eq!(
-        entries,
-        [(
-            "gemini-generate",
-            "https://aiplatform.googleapis.com/v1/publishers/google"
-        )]
-    );
+    let at = "https://aiplatform.googleapis.com/v1/publishers/google";
+    assert_eq!(entries, [("gemini-generate", at), ("gemini-images", at)]);
     let parts = express.provider.parts().unwrap_or_default();
     let key = parts.first().and_then(|p| p.headers.get("x-goog-api-key"));
     assert_eq!(key.and_then(|v| v.to_str().ok()), Some("AQ.k"));

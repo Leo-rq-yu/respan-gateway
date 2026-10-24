@@ -48,7 +48,7 @@ Each vendor is in one of two tiers:
 | <img src="assets/vendors/cerebras.svg" width="20" height="20" alt=""> | Cerebras | `cerebras` | `CEREBRAS_API_KEY` | `openai-chat` |
 | <img src="assets/vendors/perplexity.svg" width="20" height="20" alt=""> | Perplexity | `perplexity` | `PERPLEXITY_API_KEY` | `openai-responses` |
 | <img src="assets/vendors/gemini.svg" width="20" height="20" alt=""> | Google Vertex AI | `vertex` | `GOOGLE_VERTEX_ACCESS_TOKEN` or `CLOUDSDK_AUTH_ACCESS_TOKEN` | `gemini-generate`, `gemini-images`, `gemini-transcriptions`, `vertex-veo`, `anthropic-messages`, `openai-chat`, `openai-embeddings` |
-| <img src="assets/vendors/gemini.svg" width="20" height="20" alt=""> | Vertex AI express mode | `vertex-express` | `GOOGLE_VERTEX_API_KEY` | `gemini-generate` |
+| <img src="assets/vendors/gemini.svg" width="20" height="20" alt=""> | Vertex AI express mode | `vertex-express` | `GOOGLE_VERTEX_API_KEY` | `gemini-generate`, `gemini-images` |
 | <img src="assets/vendors/deepinfra.svg" width="20" height="20" alt=""> | DeepInfra | `deepinfra` | `DEEPINFRA_API_KEY` | `openai-chat`, `openai-images`, `openai-embeddings`, `openai-speech`, `openai-transcriptions` |
 
 These tables are kept by hand: a vendor added to `ALL` in
@@ -105,7 +105,7 @@ limits or prices. The key expires within the hour: the gateway sends the
 one it is given, so whoever runs it gives it a fresh one, such as `gcloud
 auth print-access-token` prints, in a config file it reloads. Express mode,
 `vertex-express`, takes an API key that does not expire, in
-`x-goog-api-key`, for `gemini-generate` alone at
+`x-goog-api-key`, for `gemini-generate` and `gemini-images` at
 `https://aiplatform.googleapis.com/v1/publishers/google`, under no
 project; it lists no models.
 `gemini-images` draws with Gemini's image models through

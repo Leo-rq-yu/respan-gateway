@@ -2,7 +2,8 @@
 //! (chats, images and transcriptions), Veo, Claude in Anthropic's Messages,
 //! and the other models of its Model Garden in Chat Completions; Gemini's
 //! embeddings in OpenAI's; with a Google access token. And its express mode
-//! ([`EXPRESS`]): Gemini's `generateContent` alone, with an API key.
+//! ([`EXPRESS`]): Gemini's `generateContent`, for chats and images, with an
+//! API key.
 
 use std::borrow::Cow;
 
@@ -99,13 +100,17 @@ pub const VENDOR: Vendor = Vendor {
 };
 
 /// Vertex AI in express mode: Gemini's `generateContent` under no project,
-/// with an API key in `x-goog-api-key`, as Gemini's API takes it. It lists
-/// no models, as its API serves `generateContent`, `streamGenerateContent`
-/// and `countTokens` alone.
+/// for chats and Gemini's image models, with an API key in
+/// `x-goog-api-key`, as Gemini's API takes it. It lists no models, as its
+/// API serves `generateContent`, `streamGenerateContent` and `countTokens`
+/// alone.
 pub const EXPRESS: Vendor = Vendor {
     id: "vertex-express",
     key_env: &["GOOGLE_VERTEX_API_KEY"],
-    formats: &[(&GeminiGenerate, Some(EXPRESS_API))],
+    formats: &[
+        (&GeminiGenerate, Some(EXPRESS_API)),
+        (&GeminiImages, Some(EXPRESS_API)),
+    ],
     models: list_none,
     ..Vendor::DEFAULT
 };
