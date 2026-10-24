@@ -193,7 +193,8 @@ block. `stopReason` is the finish: `end_turn` and `stop_sequence` stop,
 `guardrail_intervened` are filtered (the latter native to this format), and
 others stay native. Usage counts the cache reads and writes as parts of the
 input. Converse names neither an id nor a model, so the response's are empty;
-its metrics, trace and model-specific fields are inert.
+its metrics, trace and model-specific fields, and a block of another type,
+stay native: only a Converse client gets them.
 
 A client's request is read the same way back: a `cachePoint` marks the
 part, tool or system block before it, and what the kind has no form for (a

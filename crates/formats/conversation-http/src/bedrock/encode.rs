@@ -1,9 +1,7 @@
 //! Events as Converse, whole or as ConverseStream's AWS event stream: the
 //! encoders of a client's response.
 
-use crate::is_inert;
-use crate::schema::{Gate, arguments_object, check_usage, fits, unwritable_content};
-use crate::schema::{UsageFields, unwritable_native};
+use crate::schema::{Gate, UsageFields, arguments_object, check_usage, fits, unwritable_content};
 use respan_gateway_conversation::{
     Assembled, AssembledItem, Block, Delta, Finish, Output, Usage, block_fields,
 };
@@ -116,13 +114,11 @@ pub(super) fn whole(whole: &Assembled) -> Result<Value, Fault> {
                         top.extend(said.map(|(k, v)| (k.clone(), v.clone())));
                     }
                     Some("content_block") => content.push(raw["block"].clone()),
-                    _ => return Err(unwritable_native(format, raw)),
+                    _ => return Err(unwritable_content()),
                 }
             }
-            AssembledItem::Native(NativeValue { format, value: raw }) if is_inert(format, raw) => {}
-            AssembledItem::Native(NativeValue { format, value: raw }) => {
-                return Err(unwritable_native(format, raw));
-            }
+            // Another format's: only a client of that format could read it.
+            AssembledItem::Native(_) => {}
         }
     }
     let mut v = Map::new();
@@ -325,13 +321,11 @@ impl EventStream {
                         self.begin(out);
                         out.extend_from_slice(&event(kind, &v));
                     }
-                    _ => return Err(unwritable_native(format, raw)),
+                    _ => return Err(unwritable_content()),
                 }
             }
-            Output::Native(NativeValue { format, value: raw }) if is_inert(format, raw) => {}
-            Output::Native(NativeValue { format, value: raw }) => {
-                return Err(unwritable_native(format, raw));
-            }
+            // Another format's: only a client of that format could read it.
+            Output::Native(_) => {}
             _ => return Err(unwritable_content()),
         }
         Ok(())

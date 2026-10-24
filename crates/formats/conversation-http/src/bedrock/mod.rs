@@ -53,8 +53,8 @@
 //! - `usage` is [`Output::Usage`]: the cache reads and writes are parts of the
 //!   input.
 //! - What else a response says (`metrics`, `trace`, `serviceTier`, the
-//!   model's own response fields) is an inert [`Output::Native`]; a block of
-//!   another type (a citation, a guard) is not.
+//!   model's own response fields), and a block of another type (a citation,
+//!   a guard), is an [`Output::Native`], which only a Converse client gets.
 //!
 //! A failure in the stream (`:message-type` `exception` or `error`) is an
 //! upstream fault of its type; a stream that ends before `messageStop`, or
@@ -272,15 +272,6 @@ impl Schema for BedrockConverse {
 
     fn encode_part(_: &Content) -> Result<Value, Fault> {
         Err(unwritable_content())
-    }
-
-    /// What is kept beside a response: its metrics, trace and the model's
-    /// own fields.
-    fn is_inert(raw: &Value) -> bool {
-        matches!(
-            raw["type"].as_str(),
-            Some("metadata_fields" | "stop_fields")
-        )
     }
 
     fn is_response(v: &Value) -> bool {
