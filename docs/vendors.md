@@ -67,7 +67,7 @@ formats (`openai-images`, `openai-transcriptions`, `openai-speech`,
 `openai-videos`, `openai-embeddings`) and `openai-responses` take the same
 base URL as `openai-chat`; `cohere-rerank` takes the vendor's base URL with its
 version, such as Cohere's `https://api.cohere.com/v2` (Together's, Fireworks',
-OpenRouter's and vLLM's are their `openai-chat` one), and DeepInfra's dialect
+OpenRouter's and vLLM's are their `openai-chat` one), and DeepInfra's own
 of it its inference API, `https://api.deepinfra.com/v1/inference`, a model's
 at `/{model}`. Cohere's `openai-chat` and `openai-embeddings` are at its
 compatibility API, `https://api.cohere.ai/compatibility/v1`. Gemini's own formats, `gemini-generate`

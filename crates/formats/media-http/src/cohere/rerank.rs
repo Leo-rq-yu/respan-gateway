@@ -1,7 +1,6 @@
 //! Cohere Rerank: `POST /rerank` (JSON), answered whole in JSON.
 
-use crate::dialect::{self, Spec};
-use crate::edge::sends;
+use crate::edge::{bind_provider, sends};
 use crate::openai::{
     Form, as_usage_extras, bind_client, content_type, foreign, invalid, json_bytes, missing,
     post_to, take_count, take_string, unreadable, usage_extras, whole_json,
@@ -81,31 +80,7 @@ impl Format<ProviderIo, Output, Input> for CohereRerank {
     }
 
     fn bind(&self, io: ProviderIo) -> Result<Connection<Output, Input>, Fault> {
-        Ok(dialect::bind(*self, io))
-    }
-}
-
-/// Its provider edge, in parts a vendor's dialect runs around.
-impl Spec for CohereRerank {
-    type Input = Input;
-    type Output = Output;
-    const NAME: &'static str = NAME;
-
-    fn post(
-        &self,
-        head: &mut RequestHead,
-        input: &Input,
-        _: bool,
-    ) -> Result<Box<dyn Encoder<Input>>, Fault> {
-        post(head, input)
-    }
-
-    fn read_response(
-        &self,
-        _: &http::response::Parts,
-        _: &http::Request<Bytes>,
-    ) -> Option<Box<dyn Decoder<Output>>> {
-        Some(read_response())
+        Ok(bind_provider(io, NAME, post, |_, _| Some(read_response())))
     }
 }
 

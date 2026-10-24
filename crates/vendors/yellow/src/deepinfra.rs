@@ -1,19 +1,21 @@
 //! DeepInfra: Chat Completions, images, embeddings, speech and
 //! transcriptions, as OpenAI serves them, and rerank on its own inference
-//! API, in its dialect of Cohere's. Not its videos: a finished job says
+//! API, a format of its own of Cohere's name. Not its videos: a finished job says
 //! `succeeded`, not `completed`, beside a `data` list of its files.
+
+use std::sync::{Arc, OnceLock};
 
 use respan_gateway_conversation::Usage;
 use respan_gateway_conversation_http::fields::{kept, native_of, rest_of};
 use respan_gateway_conversation_http::openai::OpenAiChat;
-use respan_gateway_core::Fault;
+use respan_gateway_conversation_http::read_provider_error;
+use respan_gateway_core::{Connection, Fault, Format, Provider};
 use respan_gateway_http::bytes::Bytes;
 use respan_gateway_http::http::request::Parts as RequestHead;
 use respan_gateway_http::path::set_path;
-use respan_gateway_http::{Decoder, Whole};
+use respan_gateway_http::{Decoder, Encoder, ProviderIo, Whole};
 use respan_gateway_media::rerank;
 use respan_gateway_media_http::cohere::CohereRerank;
-use respan_gateway_media_http::dialect::{Dialect, Dialected, OwnCall};
 use respan_gateway_media_http::openai::{
     OpenAiEmbeddings, OpenAiImages, OpenAiSpeech, OpenAiTranscriptions,
 };
@@ -21,7 +23,8 @@ use respan_gateway_media_http::openai::{
 use serde_json::Value;
 
 use respan_gateway_vendor_kit::{
-    Body, BoxFuture, Model, Models, Price, Vendor, VendorProvider, built_wrong, http, json, time,
+    Body, BoxFuture, Connect, Model, Models, Price, Upstream, Vendor, VendorProvider, built_wrong,
+    http, json, time,
 };
 
 /// Where its API is.
@@ -40,10 +43,7 @@ pub const VENDOR: Vendor = Vendor {
         (&OpenAiEmbeddings, Some(BASE_URL)),
         (&OpenAiSpeech, Some(BASE_URL)),
         (&OpenAiTranscriptions, Some(BASE_URL)),
-        (
-            &Dialected::new(CohereRerank, DeepInfra),
-            Some(INFERENCE_URL),
-        ),
+        (&DeepInfraRerank, Some(INFERENCE_URL)),
     ],
     models: list_models,
     ..Vendor::DEFAULT
@@ -54,25 +54,56 @@ pub const VENDOR: Vendor = Vendor {
 /// `scores` in the documents' order and `input_tokens`. It takes no
 /// `top_n` or `return_documents`: its answer is ranked best first, cut to
 /// `top_n` and given its documents here, as Cohere's would be. Its
-/// `inference_status`, with what the call cost, is a native field.
+/// `inference_status`, with what the call cost, is a native field. A
+/// format of Cohere's name, so a client of Cohere's is relayed to it.
 #[derive(Debug, Clone, Copy)]
-pub struct DeepInfra;
+pub struct DeepInfraRerank;
 
-impl Dialect<rerank::Input, rerank::Output> for DeepInfra {
-    fn call(
-        &self,
-        head: &mut RequestHead,
-        input: &rerank::Input,
-    ) -> Option<Result<OwnCall<rerank::Input, rerank::Output>, Fault>> {
-        Some(rerank_call(head, input))
+impl Upstream for DeepInfraRerank {
+    fn name(&self) -> &str {
+        CohereRerank::NAME
+    }
+
+    fn provider(&self, name: String, connect: Connect) -> Provider {
+        Provider::new(name, *self, move |x| connect(x))
     }
 }
 
-/// A rerank call of `input`, at its model's path.
-fn rerank_call(
-    head: &mut RequestHead,
-    input: &rerank::Input,
-) -> Result<OwnCall<rerank::Input, rerank::Output>, Fault> {
+impl Format<ProviderIo, rerank::Output, rerank::Input> for DeepInfraRerank {
+    fn name(&self) -> &str {
+        CohereRerank::NAME
+    }
+
+    /// The call of its one input, and its answer read against what was
+    /// asked.
+    fn bind(&self, io: ProviderIo) -> Result<Connection<rerank::Output, rerank::Input>, Fault> {
+        let asked = Arc::new(OnceLock::new());
+        let answered = Arc::clone(&asked);
+        Ok(io.with_refusal(read_provider_error).bind(
+            move |head, input: Option<&rerank::Input>| {
+                let input = input.ok_or_else(|| {
+                    Fault::config("deepinfra rerank does not accept streaming inputs")
+                })?;
+                let body = rerank_call(head, input)?;
+                let _ = asked.set(input.clone());
+                let send = move |_: &rerank::Input, out: &mut Vec<Bytes>| {
+                    out.push(body.clone());
+                    Ok(())
+                };
+                Ok(Box::new(send) as Box<dyn Encoder<rerank::Input>>)
+            },
+            move |_, _| {
+                let asked: rerank::Input = answered.get()?.clone();
+                let read =
+                    move |raw: Bytes, out: &mut Vec<rerank::Output>| ranked(&asked, &raw, out);
+                Some(Box::new(Whole::new(read)) as Box<dyn Decoder<rerank::Output>>)
+            },
+        ))
+    }
+}
+
+/// The body of a rerank call of `input`, its head at its model's path.
+fn rerank_call(head: &mut RequestHead, input: &rerank::Input) -> Result<Bytes, Fault> {
     let model = input
         .model
         .as_deref()
@@ -89,19 +120,9 @@ fn rerank_call(
     let mut v = kept(CohereRerank::NAME, &input.native)?;
     v.insert("queries".into(), vec![input.query.clone()].into());
     v.insert("documents".into(), input.documents.clone().into());
-    let body = Bytes::from(
-        serde_json::to_vec(&v)
-            .map_err(|e| Fault::internal("a body could not be written").with_source(e))?,
-    );
-    let asked = input.clone();
-    let answer = move |raw: Bytes, out: &mut Vec<rerank::Output>| ranked(&asked, &raw, out);
-    Ok(OwnCall {
-        body: Box::new(move |_: &rerank::Input, out: &mut Vec<Bytes>| {
-            out.push(body.clone());
-            Ok(())
-        }),
-        answer: Box::new(Whole::new(answer)) as Box<dyn Decoder<rerank::Output>>,
-    })
+    let body = serde_json::to_vec(&v)
+        .map_err(|e| Fault::internal("a body could not be written").with_source(e))?;
+    Ok(Bytes::from(body))
 }
 
 /// Whether `model` is a path of its names, `owner/name`, of letters,
@@ -307,12 +328,9 @@ mod tests {
         asked.top_n = Some(2);
         asked.return_documents = Some(true);
         let (mut head, _) = http::Request::new(()).into_parts();
-        let call = rerank_call(&mut head, &asked).expect("a call");
+        let sent = rerank_call(&mut head, &asked).expect("a call");
         assert_eq!(head.uri.path(), "/Qwen/Qwen3-Reranker-0.6B");
-        let mut sent = Vec::new();
-        let mut body = call.body;
-        body.encode(&asked, &mut sent).expect("a body");
-        let sent: Value = serde_json::from_slice(&sent[0]).unwrap_or_default();
+        let sent: Value = serde_json::from_slice(&sent).unwrap_or_default();
         assert_eq!(
             sent,
             json!({ "queries": ["q"], "documents": ["a", "b", "c"] })
