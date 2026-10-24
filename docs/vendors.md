@@ -72,7 +72,10 @@ take `https://generativelanguage.googleapis.com/v1beta` with
 the key in `x-goog-api-key`. Bedrock's `bedrock-embeddings` (InvokeModel, the model
 in the path) takes its region's runtime,
 `https://bedrock-runtime.{region}.amazonaws.com`, with a Bedrock API key as
-a bearer token. Session formats take a `wss://` URL as their
+a bearer token; its models are its region's control plane's list,
+`https://bedrock.{region}.amazonaws.com`, each foundation model called on
+demand by its id and each inference profile (`us.`, `global.`) by its own,
+with the same key. Session formats take a `wss://` URL as their
 SDK does: `wss://api.openai.com/v1` for `openai-realtime` and
 `responses-ws`, `wss://generativelanguage.googleapis.com` for `gemini-live`,
 `wss://api.mistral.ai/v1` for `mistral-realtime`: Mistral's realtime
