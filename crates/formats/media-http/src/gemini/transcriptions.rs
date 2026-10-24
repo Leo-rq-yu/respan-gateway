@@ -36,10 +36,10 @@ const INLINE_LIMIT: usize = 20 * 1024 * 1024;
 /// holds, is refused, 400, before any call. The native fields of this format
 /// go in the body,
 /// `generationConfig` merged with what it says. An answer's text, but not
-/// its thoughts', is the transcript, its usage `usageMetadata`'s tokens,
-/// with the per-modality counts (audio tokens among them) kept as a native
-/// event. An answer with no text, saying why, is refused, 400
-/// `no_transcript`.
+/// its thoughts', is the transcript, as is a transcribing model's
+/// `audioTranscription` part (`gemini-3.5-transcribe`'s); its usage is
+/// `usageMetadata`'s tokens. An answer with no text, saying why, is
+/// refused, 400 `no_transcript`.
 ///
 /// It serves providers only: no client speaks it.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -182,6 +182,7 @@ fn read_response(raw: Bytes, out: &mut Vec<Output>) -> Result<(), Fault> {
         let parts = candidate["content"]["parts"].as_array();
         for part in parts.into_iter().flatten().filter(|p| p["thought"] != true) {
             said.extend(part["text"].as_str());
+            said.extend(part["audioTranscription"]["text"].as_str());
         }
         why = candidate["finishReason"].as_str().filter(|r| *r != "STOP");
     }
@@ -196,13 +197,6 @@ fn read_response(raw: Bytes, out: &mut Vec<Output>) -> Result<(), Fault> {
     let usage = &v["usageMetadata"];
     if usage.is_object() {
         out.push(Output::Usage(usage_of(usage)?));
-        let details: Map<String, Value> = ["promptTokensDetails", "candidatesTokensDetails"]
-            .into_iter()
-            .filter_map(|key| Some((key.to_owned(), usage.get(key)?.clone())))
-            .collect();
-        if !details.is_empty() {
-            out.push(Output::native(NAME, Value::Object(details)));
-        }
     }
     Ok(())
 }
@@ -329,8 +323,19 @@ mod tests {
             panic!("no usage: {out:?}");
         };
         assert_eq!((usage.input_tokens, usage.output_tokens), (40, 3));
-        assert!(matches!(&out[2], Output::Native(_)));
-        assert_eq!(out.len(), 3);
+        assert_eq!(out.len(), 2);
+        // A transcribing model's own part.
+        let raw = json!({"candidates": [{"content": {"parts": [
+            {"audioTranscription": {"text": "Hello from the gateway."}},
+        ]}, "finishReason": "STOP"}]});
+        let mut out = Vec::new();
+        read_response(Bytes::from(raw.to_string()), &mut out).expect("read");
+        assert_eq!(
+            out,
+            [Output::Transcript(Transcript::new(
+                "Hello from the gateway."
+            ))]
+        );
     }
 
     #[test]
