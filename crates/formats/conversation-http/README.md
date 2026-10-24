@@ -61,7 +61,14 @@ path ending in `/v1/messages`; its provider base URL leaves the version out,
 such as `https://api.anthropic.com`, and `anthropic-version: 2023-06-01` is
 sent if the request names none.
 
-An OpenAI request's `inference_geo` is written as the same top-level field.
+Messages' own fields that an OpenAI Chat or Responses request may carry for
+an Anthropic model are written as Messages says them: `inference_geo`,
+`service_tier`, `speed`, `top_k` and `cache_control` as they came, and
+`safety_identifier` as `metadata.user_id` unless `user` names one. A Messages
+request with `inference_geo`, `service_tier` or `speed` is refused by the
+OpenAI formats, which have no such field or another meaning for it. Beta
+fields (`context_management`, `mcp_servers`) and `container`, which needs a
+server tool, stay refused from an OpenAI request.
 
 Thinking is the kind's reasoning; its signature, and what else the kind has
 no form for, stays native to this format. Reasoning without its signature,
