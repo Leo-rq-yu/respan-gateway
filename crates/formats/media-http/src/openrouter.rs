@@ -33,8 +33,10 @@ const NAME: &str = "openrouter-videos";
 /// it comes. A job's id is the provider's, `gen-vid-` and a timestamp and
 /// letters ([`OpenRouterVideos::JOB_IDS`]), which routes a follow-up to it.
 ///
-/// OpenRouter cannot remix, delete or list videos, nor make a thumbnail or
-/// a spritesheet: those are refused, 400 `unsupported`, before any call.
+/// OpenRouter cannot delete or list videos, nor make a thumbnail or a
+/// spritesheet, and continues a job (`previous_job_id`) only for a call that
+/// names its model again, which a remix does not: those are refused, 400
+/// `unsupported`, before any call.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct OpenRouterVideos;
 

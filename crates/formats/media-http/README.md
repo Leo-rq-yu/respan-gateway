@@ -72,8 +72,9 @@ bearer key.
   failed, with the job's `error`; its `usage` (the cost) and `generation_id`
   stay native. Its content is `GET /videos/{id}/content?index=0`.
 - A job's id starts `gen-vid-`, which routes a follow-up to its provider.
-  Remix, delete, list, a thumbnail and a spritesheet are refused, 400
-  `unsupported`, before any call.
+  Delete, list, a thumbnail and a spritesheet are refused, 400
+  `unsupported`, before any call, and so is a remix: OpenRouter continues a
+  job (`previous_job_id`) only for a call that names its model again.
 
 `gemini::GeminiImages`, named `gemini-images`: Gemini's image models,
 such as Nano Banana, through `generateContent`, to clients and providers,
