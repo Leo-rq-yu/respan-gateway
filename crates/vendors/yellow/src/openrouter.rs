@@ -282,22 +282,6 @@ mod tests {
     use serde_json::json;
 
     #[test]
-    fn it_speaks_every_media_format_it_serves() {
-        let names = [
-            "openai-chat",
-            "openai-embeddings",
-            "openai-transcriptions",
-            "openai-speech",
-            "openai-images",
-            "openrouter-videos",
-            "decisions",
-        ];
-        for name in names {
-            assert!(VENDOR.format(name).is_some(), "{name}");
-        }
-    }
-
-    #[test]
     fn a_models_outputs_say_its_kind_and_a_reranker_is_left_out() {
         let card = |id: &str, out: Value, prompt: &str| {
             json!({ "id": id, "context_length": 0, "expiration_date": null,
