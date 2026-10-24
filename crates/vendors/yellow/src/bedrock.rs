@@ -2,8 +2,8 @@
 //! Nova Multimodal Embeddings and Marengo on InvokeModel, at a region's
 //! runtime, with a Bedrock API key.
 
-use respan_gateway_core::Fault;
 use respan_gateway_conversation_http::bedrock::BedrockConverse;
+use respan_gateway_core::Fault;
 use respan_gateway_media_http::bedrock::BedrockEmbeddings;
 use serde_json::Value;
 
@@ -224,5 +224,29 @@ mod tests {
             cards[1].display_name.as_deref(),
             Some("US cohere.embed-v4:0")
         );
+    }
+    #[test]
+    fn a_chat_model_is_one_converse_serves_whole_and_streamed() {
+        let model = |id: &str, outputs: Value, converse: Value| {
+            let mut m = summary(id, outputs, json!(["ON_DEMAND"]));
+            m["inferenceAPIsSupported"] = json!({ "converse": converse });
+            m["converse"] = json!({ "maxTokensMaximum": 64000, "reasoningSupported": { "embedded": false },
+                                   "userDocumentTypesSupported": ["pdf"] });
+            m
+        };
+        let both = json!({ "sync": true, "streaming": true });
+        let models = json!({"modelSummaries": [
+            model("amazon.nova-lite-v1:0", json!(["TEXT"]), both.clone()),
+            model("amazon.nova-2-sonic-v1:0", json!(["SPEECH", "TEXT"]), json!({ "sync": false, "streaming": true })),
+            model("cohere.rerank-v3-5:0", json!(["TEXT"]), json!({ "sync": false, "streaming": false })),
+        ]});
+        let cards = cards(&models, &[]);
+        let ids: Vec<&str> = cards.iter().map(|c| c.id.as_str()).collect();
+        assert_eq!(ids, ["amazon.nova-lite-v1:0"]);
+        let nova = &cards[0];
+        assert_eq!(nova.kind.as_deref(), Some("chat"));
+        assert_eq!(nova.max_output_tokens, Some(64000));
+        assert_eq!(nova.capabilities, [Capability::Reasoning]);
+        assert_eq!(nova.input_modalities, [Modality::Image, Modality::Document]);
     }
 }
