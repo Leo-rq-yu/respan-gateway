@@ -2,27 +2,20 @@
 //! videos and decisions, for many vendors' models; speech, images and
 //! decisions in its dialect.
 
-use std::borrow::Cow;
 use std::collections::HashMap;
 
-use base64::Engine as _;
-use respan_gateway_conversation::Output;
-use respan_gateway_conversation::{Media, MediaSource, Usage};
-use respan_gateway_conversation_http::dialect::{Call, Dialect, Dialected};
+use respan_gateway_conversation::{Media, MediaSource};
 use respan_gateway_conversation_http::fields::{kept, native_of};
 use respan_gateway_conversation_http::openai::OpenAiChat;
-use respan_gateway_core::NativeValue;
 use respan_gateway_core::{Fault, Filter};
 use respan_gateway_decision_http::Decisions;
-use respan_gateway_decision_http::dialect::Dialect as DecisionDialect;
-use respan_gateway_decision_http::dialect::Dialected as DecisionDialected;
 use respan_gateway_http::bytes::Bytes;
+use respan_gateway_http::content;
+use respan_gateway_http::http::request::Parts as RequestHead;
 use respan_gateway_http::http::response::Parts as ResponseHead;
-use respan_gateway_http::{Decoder, Whole};
+use respan_gateway_http::path::set_path;
 use respan_gateway_media::image;
 use respan_gateway_media::speech;
-use respan_gateway_media_http::dialect::Dialect as MediaDialect;
-use respan_gateway_media_http::dialect::Dialected as MediaDialected;
 use respan_gateway_media_http::openai::{
     OpenAiEmbeddings, OpenAiImages, OpenAiSpeech, OpenAiTranscriptions,
 };
@@ -30,8 +23,8 @@ use respan_gateway_media_http::openrouter::OpenRouterVideos;
 use serde_json::{Map, Value, json};
 
 use respan_gateway_vendor_kit::{
-    Body, BoxFuture, Model, Models, Vendor, VendorProvider, built_wrong, chat, http, json, models,
-    time,
+    Body, BoxFuture, Dialect, Dialected, Model, Models, Rewrite, Vendor, VendorProvider,
+    built_wrong, http, json, models, time,
 };
 
 /// Where its API is.
@@ -43,20 +36,20 @@ pub const VENDOR: Vendor = Vendor {
     id: "openrouter",
     key_env: &["OPENROUTER_API_KEY"],
     formats: &[
-        (&Dialected::new(OpenAiChat, OpenRouter), Some(BASE_URL)),
+        (&OpenAiChat, Some(BASE_URL)),
         (&OpenAiEmbeddings, Some(BASE_URL)),
         (&OpenAiTranscriptions, Some(BASE_URL)),
         (
-            &MediaDialected::new(OpenAiSpeech, OpenRouterSpeech),
+            &Dialected::new(OpenAiSpeech, OpenRouterSpeech),
             Some(BASE_URL),
         ),
         (
-            &MediaDialected::new(OpenAiImages, OpenRouterImages),
+            &Dialected::new(OpenAiImages, OpenRouterImages),
             Some(BASE_URL),
         ),
         (&OpenRouterVideos, Some(BASE_URL)),
         (
-            &DecisionDialected::new(Decisions, OpenRouterDecisions),
+            &Dialected::new(Decisions, OpenRouterDecisions),
             Some(BASE_URL),
         ),
     ],
@@ -64,41 +57,39 @@ pub const VENDOR: Vendor = Vendor {
     ..Vendor::DEFAULT
 };
 
-/// OpenRouter's Chat Completions: a choice's `native_finish_reason` only
-/// describes it.
-#[derive(Debug, Clone, Copy)]
-pub struct OpenRouter;
-
-impl Dialect for OpenRouter {
-    fn output(&self, call: &Call) -> Option<Box<dyn Filter<Output>>> {
-        chat::read(call, &["native_finish_reason"], false)
-    }
-}
-
 /// OpenRouter's speech: its audio is `mp3` or `pcm`, and `pcm` when none is
 /// asked, so a call that names none is sent for `mp3`, as OpenAI's is, and
 /// any other format fails `bad_request` before sending. It is not asked to
-/// stream.
+/// stream; a client that asked still gets a stream, framed at the client
+/// edge.
 #[derive(Debug, Clone, Copy)]
 pub struct OpenRouterSpeech;
 
-impl MediaDialect<speech::Input, speech::Output> for OpenRouterSpeech {
-    fn input<'a>(&self, input: &'a speech::Input) -> Result<Cow<'a, speech::Input>, Fault> {
-        match input.audio_format.as_deref() {
-            Some("mp3" | "pcm") => Ok(Cow::Borrowed(input)),
-            Some(other) => Err(Fault::bad_request(format!(
-                "openrouter speech takes 'mp3' or 'pcm', not '{other}'"
-            ))),
-            None => {
-                let mut input = input.clone();
-                input.audio_format = Some("mp3".to_owned());
-                Ok(Cow::Owned(input))
-            }
-        }
+impl Dialect for OpenRouterSpeech {
+    type Input = speech::Input;
+    type Output = speech::Output;
+
+    fn inputs(&self) -> Option<Box<dyn Filter<speech::Input>>> {
+        Some(Box::new(speech_taken))
     }
 
-    fn streams(&self, _: bool) -> bool {
-        false
+    fn request(&self, _: &mut RequestHead) -> Result<Option<Rewrite>, Fault> {
+        Ok(Some(without("stream_format")))
+    }
+}
+
+/// `input` as OpenRouter's speech takes it: for `mp3` or `pcm`, `mp3` if
+/// it names none.
+fn speech_taken(input: &mut speech::Input) -> Result<(), Fault> {
+    match input.audio_format.as_deref() {
+        Some("mp3" | "pcm") => Ok(()),
+        Some(other) => Err(Fault::bad_request(format!(
+            "openrouter speech takes 'mp3' or 'pcm', not '{other}'"
+        ))),
+        None => {
+            input.audio_format = Some("mp3".to_owned());
+            Ok(())
+        }
     }
 }
 
@@ -107,91 +98,102 @@ impl MediaDialect<speech::Input, speech::Output> for OpenRouterSpeech {
 /// (`{"type": "image_url", "image_url": {"url"}}`); a mask has no place
 /// there and fails `bad_request` before sending. It answers whole, in JSON,
 /// each image with its `media_type`, and usage as `prompt_tokens` and
-/// `completion_tokens` beside its `cost`; it is not asked to stream.
+/// `completion_tokens` beside its `cost`, read as OpenAI's answer; it is
+/// not asked to stream.
 #[derive(Debug, Clone, Copy)]
 pub struct OpenRouterImages;
 
-impl MediaDialect<image::Input, image::Output> for OpenRouterImages {
-    fn input<'a>(&self, input: &'a image::Input) -> Result<Cow<'a, image::Input>, Fault> {
-        if input.mask.is_some() {
-            return Err(Fault::bad_request("openrouter images take no 'mask'"));
-        }
-        if input.images.is_empty() {
-            return Ok(Cow::Borrowed(input));
-        }
-        let link = |media: &Media| {
-            let url = match &media.source {
-                MediaSource::Url(url) => url.clone(),
-                MediaSource::Bytes(bytes) => format!(
-                    "data:{};base64,{}",
-                    media.mime_type,
-                    base64::engine::general_purpose::STANDARD.encode(bytes)
-                ),
-            };
-            json!({ "type": "image_url", "image_url": { "url": url } })
-        };
-        let mut fields = kept(OpenAiImages::NAME, &input.native)?;
-        let images: Vec<Value> = input.images.iter().map(link).collect();
-        fields.insert("input_references".into(), images.into());
-        let mut input = input.clone();
-        input.images.clear();
-        input.native = native_of(OpenAiImages::NAME, fields);
-        Ok(Cow::Owned(input))
+impl Dialect for OpenRouterImages {
+    type Input = image::Input;
+    type Output = image::Output;
+
+    fn inputs(&self) -> Option<Box<dyn Filter<image::Input>>> {
+        Some(Box::new(images_taken))
     }
 
-    fn path(&self) -> Option<&'static str> {
-        Some("/images")
+    fn request(&self, head: &mut RequestHead) -> Result<Option<Rewrite>, Fault> {
+        set_path(head, "/images")?;
+        Ok(Some(without("stream")))
     }
 
-    fn read_response(&self, head: &ResponseHead) -> Option<Box<dyn Decoder<image::Output>>> {
-        head.status
-            .is_success()
-            .then(|| Box::new(Whole::new(images)) as _)
-    }
-
-    fn streams(&self, _: bool) -> bool {
-        false
+    fn response(&self, _: &RequestHead, head: &mut ResponseHead) -> Option<Rewrite> {
+        let whole = head.status.is_success() && !content::is_stream(head);
+        whole.then(|| Box::new(as_openais) as Rewrite)
     }
 }
 
-/// The events of a whole answer: its [`image::Start`], an [`image::Image`]
-/// of each item of `data`, and its usage, `cost` and the rest native.
-fn images(raw: Bytes, out: &mut Vec<image::Output>) -> Result<(), Fault> {
-    let answer: Value = serde_json::from_slice(&raw)
-        .map_err(|_| Fault::upstream("openrouter images answered no JSON"))?;
-    let items = answer["data"]
-        .as_array()
-        .ok_or_else(|| Fault::upstream("openrouter images answered no 'data'"))?;
-    out.push(image::Output::Start(image::Start::new(
-        answer["created"].as_u64(),
-    )));
-    for item in items {
-        let bytes = item["b64_json"]
-            .as_str()
-            .and_then(|data| base64::engine::general_purpose::STANDARD.decode(data).ok())
-            .ok_or_else(|| Fault::upstream("openrouter images answered no base64 'b64_json'"))?;
-        let mime = item["media_type"].as_str().unwrap_or("image/png");
-        let media = Media::new(mime, MediaSource::Bytes(Bytes::from(bytes)));
-        out.push(image::Output::Image(image::Image::new(media)));
+/// `input` as OpenRouter's images take it: its images to edit as
+/// `input_references`, and no mask.
+fn images_taken(input: &mut image::Input) -> Result<(), Fault> {
+    if input.mask.is_some() {
+        return Err(Fault::bad_request("openrouter images take no 'mask'"));
     }
-    if let Some(usage) = answer["usage"].as_object() {
-        let count = |key: &str| usage.get(key).and_then(Value::as_u64).unwrap_or(0);
-        out.push(image::Output::Usage(Usage::new(
-            count("prompt_tokens"),
-            count("completion_tokens"),
-        )));
-        const READ: &[&str] = &["prompt_tokens", "completion_tokens", "total_tokens"];
-        let rest: Map<String, Value> = usage
-            .iter()
-            .filter(|(k, _)| !READ.contains(&k.as_str()))
-            .map(|(k, v)| (k.clone(), v.clone()))
-            .collect();
-        if !rest.is_empty() {
-            let native = NativeValue::new(OpenAiImages::NAME, json!({ "usage": rest }));
-            out.push(image::Output::Native(native));
+    if input.images.is_empty() {
+        return Ok(());
+    }
+    let link = |media: &Media| {
+        let url = match &media.source {
+            MediaSource::Url(url) => url.clone(),
+            MediaSource::Bytes(bytes) => {
+                use base64::Engine as _;
+                let data = base64::engine::general_purpose::STANDARD.encode(bytes);
+                format!("data:{};base64,{data}", media.mime_type)
+            }
+        };
+        json!({ "type": "image_url", "image_url": { "url": url } })
+    };
+    let mut fields = kept(OpenAiImages::NAME, &input.native)?;
+    let images: Vec<Value> = input.images.iter().map(link).collect();
+    fields.insert("input_references".into(), images.into());
+    input.images.clear();
+    input.native = native_of(OpenAiImages::NAME, fields);
+    Ok(())
+}
+
+/// A whole answer as OpenAI's: its images' `media_type` its
+/// `output_format`, and its usage's `prompt_tokens` and `completion_tokens`
+/// its `input_tokens` and `output_tokens`.
+fn as_openais(raw: Bytes) -> Result<Bytes, Fault> {
+    let unread = || Fault::upstream("openrouter images answered no JSON object");
+    let mut answer: Map<String, Value> = serde_json::from_slice(&raw).map_err(|_| unread())?;
+    let mut mime = None;
+    let items = answer.get_mut("data").and_then(Value::as_array_mut);
+    for item in items.into_iter().flatten().filter_map(Value::as_object_mut) {
+        if let Some(Value::String(media_type)) = item.shift_remove("media_type") {
+            mime.get_or_insert(media_type);
         }
     }
-    Ok(())
+    if let Some(mime) = mime {
+        let format = mime.strip_prefix("image/").unwrap_or(&mime).to_owned();
+        answer.entry("output_format").or_insert(format.into());
+    }
+    if let Some(usage) = answer.get_mut("usage").and_then(Value::as_object_mut) {
+        for (theirs, ours) in [
+            ("prompt_tokens", "input_tokens"),
+            ("completion_tokens", "output_tokens"),
+        ] {
+            if let Some(count) = usage.shift_remove(theirs) {
+                usage.entry(ours).or_insert(count);
+            }
+        }
+    }
+    serde_json::to_vec(&answer)
+        .map(Bytes::from)
+        .map_err(|e| Fault::internal("an images answer is not written").with_source(e))
+}
+
+/// A rewrite of a JSON call without its `key`.
+fn without(key: &'static str) -> Rewrite {
+    Box::new(move |body: Bytes| {
+        let unwritten = |e| Fault::internal("a call is no JSON object").with_source(e);
+        let mut call: Map<String, Value> = serde_json::from_slice(&body).map_err(unwritten)?;
+        if call.shift_remove(key).is_none() {
+            return Ok(body);
+        }
+        serde_json::to_vec(&call)
+            .map(Bytes::from)
+            .map_err(unwritten)
+    })
 }
 
 /// OpenRouter's decisions: it serves them as TypeSafe's System One does,
@@ -199,9 +201,13 @@ fn images(raw: Bytes, out: &mut Vec<image::Output>) -> Result<(), Fault> {
 #[derive(Debug, Clone, Copy)]
 pub struct OpenRouterDecisions;
 
-impl DecisionDialect for OpenRouterDecisions {
-    fn path(&self) -> Option<&'static str> {
-        Some("/systemone")
+impl Dialect for OpenRouterDecisions {
+    type Input = respan_gateway_decision::Input;
+    type Output = respan_gateway_decision::Output;
+
+    fn request(&self, head: &mut RequestHead) -> Result<Option<Rewrite>, Fault> {
+        set_path(head, "/systemone")?;
+        Ok(None)
     }
 }
 
@@ -338,30 +344,21 @@ mod tests {
         assert_eq!(retires, Some(1_793_404_800));
     }
 
-    fn decode(body: &str) -> Vec<image::Output> {
-        let head = http::Response::builder()
-            .body(())
-            .expect("head")
-            .into_parts()
-            .0;
-        let mut decoder = OpenRouterImages.read_response(&head).expect("read");
-        let mut out = Vec::new();
-        decoder
-            .decode(Bytes::copy_from_slice(body.as_bytes()), &mut out)
-            .expect("decode");
-        decoder.end(Ok(()), &mut out).expect("end");
-        out
-    }
-
     #[test]
     fn images_are_served_at_images_and_an_edit_names_its_sources() {
-        assert_eq!(OpenRouterImages.path(), Some("/images"));
+        let mut head = http::Request::new(()).into_parts().0;
+        head.uri = http::Uri::from_static("/images/generations");
+        let rewrite = OpenRouterImages.request(&mut head).expect("a call");
+        assert_eq!(head.uri.path(), "/images");
+        let body = rewrite.expect("a rewrite")(Bytes::from_static(br#"{"stream":true}"#));
+        assert_eq!(body.expect("body"), Bytes::from_static(b"{}"));
         let mut input = image::Input::new("add a hat");
         input.images.push(Media::new(
             "image/png",
             MediaSource::Url("https://x/a.png".into()),
         ));
-        let sent = OpenRouterImages.input(&input).expect("input");
+        let mut sent = input.clone();
+        images_taken(&mut sent).expect("input");
         assert!(sent.images.is_empty());
         let fields = kept(OpenAiImages::NAME, &sent.native).expect("native");
         assert_eq!(
@@ -369,34 +366,32 @@ mod tests {
             json!([{ "type": "image_url", "image_url": { "url": "https://x/a.png" } }])
         );
         input.mask = Some(input.images[0].clone());
-        assert!(OpenRouterImages.input(&input).is_err());
+        assert!(images_taken(&mut input).is_err());
     }
 
     #[test]
-    fn an_images_answer_is_its_images_and_usage() {
-        let out = decode(
-            r#"{"created": 7, "data": [{"b64_json": "SUQz", "media_type": "image/webp"}],
-                "usage": {"prompt_tokens": 2, "completion_tokens": 5, "total_tokens": 7, "cost": 0.04}}"#,
+    fn an_images_answer_is_read_as_openais() {
+        let answer = br#"{"created": 7, "data": [{"b64_json": "SUQz", "media_type": "image/webp"}],
+            "usage": {"prompt_tokens": 2, "completion_tokens": 5, "total_tokens": 7, "cost": 0.04}}"#;
+        let read = as_openais(Bytes::from_static(answer)).expect("rewritten");
+        let read: Value = serde_json::from_slice(&read).expect("json");
+        assert_eq!(
+            read,
+            json!({ "created": 7, "data": [{ "b64_json": "SUQz" }],
+                    "output_format": "webp",
+                    "usage": { "total_tokens": 7, "cost": 0.04,
+                               "input_tokens": 2, "output_tokens": 5 } })
         );
-        assert_eq!(out.len(), 4);
-        let image::Output::Image(first) = &out[1] else {
-            panic!("no image")
-        };
-        assert_eq!(first.media.mime_type, "image/webp");
-        assert!(
-            matches!(&out[2], image::Output::Usage(u) if u.input_tokens == 2 && u.output_tokens == 5)
-        );
-        assert!(matches!(&out[3], image::Output::Native(_)));
     }
 
     #[test]
     fn speech_is_asked_for_mp3_unless_it_names_a_format() {
         let mut input = speech::Input::new("hi");
-        let sent = OpenRouterSpeech.input(&input).expect("input");
-        assert_eq!(sent.audio_format.as_deref(), Some("mp3"));
+        speech_taken(&mut input).expect("input");
+        assert_eq!(input.audio_format.as_deref(), Some("mp3"));
         input.audio_format = Some("pcm".to_owned());
-        assert!(OpenRouterSpeech.input(&input).is_ok());
+        assert!(speech_taken(&mut input).is_ok());
         input.audio_format = Some("opus".to_owned());
-        assert!(OpenRouterSpeech.input(&input).is_err());
+        assert!(speech_taken(&mut input).is_err());
     }
 }
