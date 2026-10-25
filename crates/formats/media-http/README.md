@@ -58,22 +58,6 @@ A vendor's departures from one of these formats are its dialect of it,
 laid over the format (`respan_gateway_http::dialect::Dialected`), so a
 client of the spec is still relayed to it.
 
-`openrouter::OpenRouterVideos`, named `openrouter-videos`: OpenRouter's video
-generation, to providers only, at `https://openrouter.ai/api/v1` with a
-bearer key.
-
-- A creation is `POST /videos` (a model is needed): `seconds` is `duration`,
-  `size` is `size`, a reference image the first of `frame_images`, and the
-  format's native fields, such as `generate_audio`, the rest of the body.
-- A job is polled by `GET /videos/{id}`: `pending` is queued, `in_progress`
-  in progress, `completed` completed, and `failed`, `cancelled` and `expired`
-  failed, with the job's `error`; its `usage` (the cost) and `generation_id`
-  stay native. Its content is `GET /videos/{id}/content?index=0`.
-- A job's id starts `gen-vid-`, which routes a follow-up to its provider.
-  Delete, list, a thumbnail and a spritesheet are refused, 400
-  `unsupported`, before any call, and so is a remix: OpenRouter continues a
-  job (`previous_job_id`) only for a call that names its model again.
-
 `gemini::GeminiImages`, named `gemini-images`: Gemini's image models,
 such as Nano Banana, through `generateContent`, to clients and providers,
 at `https://generativelanguage.googleapis.com/v1beta` with the key in

@@ -1,6 +1,6 @@
-//! OpenRouter: Chat Completions, embeddings, transcriptions, speech, images,
-//! videos and decisions, for many vendors' models; speech, images and
-//! decisions in its dialect.
+//! OpenRouter: Chat Completions, embeddings, transcriptions, speech, images
+//! and decisions, for many vendors' models; speech, images and decisions in
+//! its dialect.
 
 use std::collections::HashMap;
 
@@ -19,7 +19,6 @@ use respan_gateway_media::speech;
 use respan_gateway_media_http::openai::{
     OpenAiEmbeddings, OpenAiImages, OpenAiSpeech, OpenAiTranscriptions,
 };
-use respan_gateway_media_http::openrouter::OpenRouterVideos;
 use serde_json::{Map, Value, json};
 
 use respan_gateway_vendor_kit::{
@@ -47,7 +46,6 @@ pub const VENDOR: Vendor = Vendor {
             &Dialected::new(OpenAiImages, OpenRouterImages),
             Some(BASE_URL),
         ),
-        (&OpenRouterVideos, Some(BASE_URL)),
         (
             &Dialected::new(Decisions, OpenRouterDecisions),
             Some(BASE_URL),
@@ -74,7 +72,7 @@ impl Dialect for OpenRouterSpeech {
     }
 
     fn request(&self, _: &mut RequestHead) -> Result<Option<Rewrite>, Fault> {
-        Ok(Some(without("stream_format")))
+        Ok(Some(Box::new(|body| crate::without(body, "stream_format"))))
     }
 }
 
@@ -113,7 +111,7 @@ impl Dialect for OpenRouterImages {
 
     fn request(&self, head: &mut RequestHead) -> Result<Option<Rewrite>, Fault> {
         set_path(head, "/images")?;
-        Ok(Some(without("stream")))
+        Ok(Some(Box::new(|body| crate::without(body, "stream"))))
     }
 
     fn response(&self, _: &RequestHead, head: &mut ResponseHead) -> Option<Rewrite> {
@@ -182,20 +180,6 @@ fn as_openais(raw: Bytes) -> Result<Bytes, Fault> {
         .map_err(|e| Fault::internal("an images answer is not written").with_source(e))
 }
 
-/// A rewrite of a JSON call without its `key`.
-fn without(key: &'static str) -> Rewrite {
-    Box::new(move |body: Bytes| {
-        let unwritten = |e| Fault::internal("a call is no JSON object").with_source(e);
-        let mut call: Map<String, Value> = serde_json::from_slice(&body).map_err(unwritten)?;
-        if call.shift_remove(key).is_none() {
-            return Ok(body);
-        }
-        serde_json::to_vec(&call)
-            .map(Bytes::from)
-            .map_err(unwritten)
-    })
-}
-
 /// OpenRouter's decisions: it serves them as TypeSafe's System One does,
 /// at `/systemone`.
 #[derive(Debug, Clone, Copy)]
@@ -219,16 +203,14 @@ const KINDS: &[(&str, &str)] = &[
     ("embeddings", "embedding"),
     ("speech", "speech"),
     ("transcription", "transcription"),
-    ("video", "video"),
     ("decisions", "decision"),
 ];
 
 /// The kinds whose `prompt` and `completion` prices are not by the token: a
 /// speech model's are by the character or the second, a transcription
 /// model's by the second for some and the token for others, unsaid which;
-/// an image model's are `0` beside its own prices by the image, and a video
-/// model's `0` alone.
-const UNPRICED: &[&str] = &["image", "speech", "transcription", "video"];
+/// and an image model's are `0` beside its own prices by the image.
+const UNPRICED: &[&str] = &["image", "speech", "transcription"];
 
 /// Its models: `GET /models?output_modalities=all`, every model of every
 /// output, each with what OpenAI-compatible lists add.
@@ -241,8 +223,8 @@ fn list_models(p: &VendorProvider) -> BoxFuture<'_, Models> {
 }
 
 /// The models of its list, each of the kind its outputs say; one whose
-/// outputs say none of [`KINDS`], as a reranker, is none it serves, and is
-/// left out.
+/// outputs say none of [`KINDS`], as a reranker or a video model, is none it
+/// serves, and is left out.
 fn listed(answer: &Value) -> Vec<Model> {
     let entries = answer["data"].as_array().into_iter().flatten();
     let by_id: HashMap<&str, &Value> = entries
@@ -260,7 +242,7 @@ fn listed(answer: &Value) -> Vec<Model> {
 
 /// What its entry `m` adds to `model`: its kind, its maker, the first part
 /// of its id (an alias's after its `~`), and when it expires; a limit of
-/// `0`, as a video model's, is none. `false` if it is of no kind it serves.
+/// `0` is none. `false` if it is of no kind it serves.
 fn described(model: &mut Model, m: &Value) -> bool {
     let outputs = m["architecture"]["output_modalities"].as_array();
     let writes = |output: &str| outputs.is_some_and(|o| o.iter().any(|w| w == output));
@@ -318,20 +300,19 @@ mod tests {
                 Some("embedding"),
                 Some("speech"),
                 Some("transcription"),
-                Some("video"),
                 Some("decision"),
             ],
-            "a reranker, or a model of no outputs, is none it serves"
+            "a video model, a reranker, or a model of no outputs, is none it serves"
         );
         let makers: Vec<_> = models.iter().map(|m| m.maker.as_deref()).collect();
         assert_eq!(makers[0], Some("openai"));
-        assert_eq!(makers[7], Some("typesafe"), "an alias's maker");
+        assert_eq!(makers[6], Some("typesafe"), "an alias's maker");
         assert_eq!(models[0].price.map(|p| p.input), Some(1.0));
         assert_eq!(models[3].price.map(|p| p.input), Some(0.01));
         let priced: Vec<_> = models.iter().map(|m| m.price.is_some()).collect();
-        assert_eq!(priced, [true, true, false, true, false, false, false, true]);
+        assert_eq!(priced, [true, true, false, true, false, false, true]);
         assert_eq!(
-            (models[6].context_window, models[6].max_output_tokens),
+            (models[2].context_window, models[2].max_output_tokens),
             (None, None)
         );
     }
