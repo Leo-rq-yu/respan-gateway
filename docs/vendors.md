@@ -47,6 +47,7 @@ Each vendor is in one of two tiers:
 | <img src="assets/vendors/cloudflare.svg" width="20" height="20" alt=""> | Cloudflare | `cloudflare` | `CLOUDFLARE_API_TOKEN` | `openai-chat`, `openai-embeddings` |
 | <img src="assets/vendors/cerebras.svg" width="20" height="20" alt=""> | Cerebras | `cerebras` | `CEREBRAS_API_KEY` | `openai-chat` |
 | <img src="assets/vendors/perplexity.svg" width="20" height="20" alt=""> | Perplexity | `perplexity` | `PERPLEXITY_API_KEY` | `openai-responses` |
+| <img src="assets/vendors/empiriolabs.png" width="20" height="20" alt=""> | EmpirioLabs AI | `empiriolabs` | `EMPIRIOLABS_API_KEY` | `openai-chat`, `openai-responses`, `anthropic-messages`, `gemini-generate`, `openai-images`, `openai-embeddings`, `openai-speech`, `decisions` |
 | <img src="assets/vendors/gemini.svg" width="20" height="20" alt=""> | Google Vertex AI | `vertex` | `GOOGLE_VERTEX_ACCESS_TOKEN` or `CLOUDSDK_AUTH_ACCESS_TOKEN` | `gemini-generate`, `gemini-images`, `gemini-speech`, `gemini-transcriptions`, `vertex-veo`, `anthropic-messages`, `openai-chat`, `openai-embeddings` |
 | <img src="assets/vendors/gemini.svg" width="20" height="20" alt=""> | Vertex AI express mode | `vertex-express` | `GOOGLE_VERTEX_API_KEY` | `gemini-generate`, `gemini-images` |
 | <img src="assets/vendors/deepinfra.svg" width="20" height="20" alt=""> | DeepInfra | `deepinfra` | `DEEPINFRA_API_KEY` | `openai-chat`, `openai-images`, `openai-embeddings`, `openai-speech`, `openai-transcriptions` |
@@ -60,10 +61,12 @@ vendor, is a row or an entry here too.
 A provider's `base_url` is the one its own SDK takes. OpenAI-compatible ones
 include the version: `https://api.openai.com/v1`,
 `https://api.groq.com/openai/v1`, `https://openrouter.ai/api/v1`,
-`https://api.cerebras.ai/v1`, `https://api.deepinfra.com/v1/openai`, and
+`https://api.cerebras.ai/v1`,
+`https://api.empiriolabs.ai/v1`, `https://api.deepinfra.com/v1/openai`, and
 Gemini's OpenAI-compatible endpoint
 `https://generativelanguage.googleapis.com/v1beta/openai` (all
-`openai-chat`). Anthropic's does not: `https://api.anthropic.com`. The media
+`openai-chat`). Anthropic's does not: `https://api.anthropic.com`, nor
+EmpirioLabs AI's for `anthropic-messages`: `https://api.empiriolabs.ai`. The media
 formats (`openai-images`, `openai-transcriptions`, `openai-speech`,
 `openai-videos`, `openai-embeddings`) and `openai-responses` take the same
 base URL as `openai-chat`. Gemini's own formats, `gemini-generate`
@@ -72,7 +75,8 @@ base URL as `openai-chat`. Gemini's own formats, `gemini-generate`
 `gemini-speech` and `gemini-transcriptions` (speech and transcription by
 `generateContent`) and `gemini-veo`,
 take `https://generativelanguage.googleapis.com/v1beta` with
-the key in `x-goog-api-key`. Session formats take a `wss://` URL as their
+the key in `x-goog-api-key`; EmpirioLabs AI serves `gemini-generate` at
+`https://api.empiriolabs.ai/v1beta`. Session formats take a `wss://` URL as their
 SDK does: `wss://api.openai.com/v1` for `openai-realtime` and
 `responses-ws`, `wss://generativelanguage.googleapis.com` for `gemini-live`,
 `wss://api.mistral.ai/v1` for `mistral-realtime`: Mistral's realtime
