@@ -486,7 +486,7 @@ mod tests {
     fn its_key_is_a_bearer_token() {
         let formats = VENDOR.formats.iter().map(|(f, _)| (f.name(), f.key()));
         assert!(formats.clone().all(|(_, key)| key == KeyIn::Bearer));
-        assert_eq!(formats.count(), 8);
+        assert_eq!(formats.count(), 7);
     }
 
     /// The path `dialect` posts `call` to, and its body, as the format
