@@ -238,7 +238,7 @@ fn create_body(create: &Create) -> Result<(Bytes, Value), Fault> {
 }
 
 /// Veo's aspect ratio and resolution of a size `WxH`.
-pub(super) fn aspect_of(size: &str) -> Result<(&'static str, &'static str), Fault> {
+fn aspect_of(size: &str) -> Result<(&'static str, &'static str), Fault> {
     let parsed = size.split_once(['x', 'X']).and_then(|(w, h)| {
         let (w, h) = (w.trim().parse::<u32>().ok()?, h.trim().parse::<u32>().ok()?);
         (w > 0 && h > 0).then_some((w, h))
@@ -260,7 +260,7 @@ pub(super) fn aspect_of(size: &str) -> Result<(&'static str, &'static str), Faul
 
 /// The size, `WxH`, of a video of `aspect` and `resolution`, Veo's defaults
 /// where they say none.
-pub(super) fn size_of(aspect: Option<&str>, resolution: Option<&str>) -> Option<String> {
+fn size_of(aspect: Option<&str>, resolution: Option<&str>) -> Option<String> {
     let short = match resolution.unwrap_or("720p") {
         "720p" => 720,
         "1080p" => 1080,

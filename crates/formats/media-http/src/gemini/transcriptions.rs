@@ -2,8 +2,8 @@
 //! the [`transcription`](respan_gateway_media::transcription) kind,
 //! [`GeminiTranscriptions`].
 
-use super::is_segment;
-use crate::edge::{bind_provider, sends};
+use super::{config_of, generate, model_of};
+use crate::edge::bind_provider;
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD;
 use respan_gateway_conversation::MediaSource;
@@ -11,11 +11,10 @@ use respan_gateway_conversation_http::fields::{invalid, kept};
 use respan_gateway_conversation_http::gemini::usage_of;
 use respan_gateway_core::{Connection, ErrorCode, Fault, Format, Provider};
 use respan_gateway_http::bytes::Bytes;
-use respan_gateway_http::http::header::CONTENT_TYPE;
-use respan_gateway_http::http::{HeaderValue, request::Parts as RequestHead};
+use respan_gateway_http::http::request::Parts as RequestHead;
 use respan_gateway_http::{Connect, Encoder, KeyIn, ProviderIo, Upstream, Whole};
 use respan_gateway_media::transcription::{Input, Output, Task, Transcript};
-use serde_json::{Map, Value, json};
+use serde_json::{Value, json};
 
 const NAME: &str = "gemini-transcriptions";
 
@@ -77,25 +76,8 @@ impl Format<ProviderIo, Output, Input> for GeminiTranscriptions {
 
 /// The call of `input`: one user turn of its audio and instruction.
 fn call(head: &mut RequestHead, input: &Input) -> Result<Box<dyn Encoder<Input>>, Fault> {
-    let model = input.model.as_deref().unwrap_or_default();
-    let model = model.strip_prefix("models/").unwrap_or(model);
-    if !is_segment(model) {
-        return Err(Fault::bad_request(
-            "a Gemini transcription needs a model, such as gemini-2.5-flash",
-        ));
-    }
-    let body = serde_json::to_vec(&body_of(input)?)
-        .map_err(|e| Fault::internal("a body could not be written").with_source(e))?;
-    head.uri = format!("/models/{model}:generateContent")
-        .parse()
-        .map_err(|e| Fault::internal("a call's path is no path").with_source(e))?;
-    let json = HeaderValue::from_static("application/json");
-    head.headers.insert(CONTENT_TYPE, json);
-    Ok(sends(Bytes::from(body)))
-}
-
-/// A call's body: its turn, its `generationConfig`, and its native fields.
-fn body_of(input: &Input) -> Result<Map<String, Value>, Fault> {
+    let needs = "a Gemini transcription needs a model, such as gemini-2.5-flash";
+    let model = model_of(input.model.as_deref(), needs)?;
     let mut native = kept(NAME, &input.native)?;
     let audio = match &input.audio.source {
         MediaSource::Bytes(bytes) if bytes.len().div_ceil(3) * 4 > INLINE_LIMIT => {
@@ -109,26 +91,11 @@ fn body_of(input: &Input) -> Result<Map<String, Value>, Fault> {
         }),
     };
     let parts = json!([audio, { "text": instruction_of(input) }]);
-    let mut config = match native.remove("generationConfig") {
-        Some(Value::Object(config)) => config,
-        None => Map::new(),
-        Some(_) => return Err(invalid("generationConfig", "must be an object")),
-    };
+    let mut config = config_of(&mut native)?;
     if let Some(temperature) = input.temperature {
         config.insert("temperature".into(), temperature.into());
     }
-    let mut v = Map::new();
-    v.insert(
-        "contents".into(),
-        json!([{ "role": "user", "parts": parts }]),
-    );
-    if !config.is_empty() {
-        v.insert("generationConfig".into(), config.into());
-    }
-    for (key, value) in native {
-        v.entry(key).or_insert(value);
-    }
-    Ok(v)
+    generate(head, model, parts, config, native)
 }
 
 /// What the model is asked to do with the audio.

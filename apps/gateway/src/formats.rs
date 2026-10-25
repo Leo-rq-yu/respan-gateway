@@ -17,7 +17,7 @@ use respan_gateway_decision_http::Decisions;
 use respan_gateway_http::{ClientIo, ProviderIo, raw::Original};
 use respan_gateway_media::{embedding, image, speech, transcription, video};
 use respan_gateway_media_http::gemini::{
-    GeminiImages, GeminiSpeech, GeminiTranscriptions, GeminiVeo, VertexVeo,
+    GeminiImages, GeminiSpeech, GeminiTranscriptions, GeminiVeo,
 };
 use respan_gateway_media_http::openai::{
     OpenAiEmbeddings, OpenAiImages, OpenAiSpeech, OpenAiTranscriptions, OpenAiVideos,
@@ -283,7 +283,6 @@ pub fn formats() -> Vec<KnownFormat> {
             .model(Model::of(video::Input::model, video::Input::set_model)),
         KnownFormat::provider_only(kind::TRANSCRIPTION, &GeminiTranscriptions),
         KnownFormat::provider_only(kind::SPEECH, &GeminiSpeech),
-        KnownFormat::provider_only(kind::VIDEO, &VertexVeo).job_ids("vertex_veo_"),
         KnownFormat::of(kind::DECISION, endpoints::DECISIONS, Decisions).model(Model::of(
             decision::Input::model,
             decision::Input::set_model,

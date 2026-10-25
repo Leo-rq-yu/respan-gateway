@@ -1,8 +1,8 @@
 //! Gemini's speech models, through `generateContent`: a format of the
 //! [`speech`](respan_gateway_media::speech) kind, [`GeminiSpeech`].
 
-use super::is_segment;
-use crate::edge::{bind_provider, sends};
+use super::{config_of, generate, model_of};
+use crate::edge::bind_provider;
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD;
 use respan_gateway_conversation_http::fields::{invalid, kept};
@@ -10,11 +10,10 @@ use respan_gateway_conversation_http::gemini::usage_of;
 use respan_gateway_core::Connection;
 use respan_gateway_core::{ErrorCode, Fault, Format, Provider};
 use respan_gateway_http::bytes::{BufMut, Bytes, BytesMut};
-use respan_gateway_http::http::header::CONTENT_TYPE;
-use respan_gateway_http::http::{HeaderValue, request::Parts as RequestHead};
+use respan_gateway_http::http::request::Parts as RequestHead;
 use respan_gateway_http::{Connect, Encoder, KeyIn, ProviderIo, Upstream, Whole};
 use respan_gateway_media::speech::{Input, Output};
-use serde_json::{Map, Value, json};
+use serde_json::{Value, json};
 
 const NAME: &str = "gemini-speech";
 
@@ -72,13 +71,8 @@ impl Format<ProviderIo, Output, Input> for GeminiSpeech {
 
 /// The call of `input`: one user turn of its text, asking for audio.
 fn call(head: &mut RequestHead, input: &Input) -> Result<Box<dyn Encoder<Input>>, Fault> {
-    let model = input.model.as_deref().unwrap_or_default();
-    let model = model.strip_prefix("models/").unwrap_or(model);
-    if !is_segment(model) {
-        return Err(Fault::bad_request(
-            "Gemini speech needs a model, such as gemini-3.8-flash-tts",
-        ));
-    }
+    let needs = "Gemini speech needs a model, such as gemini-3.8-flash-tts";
+    let model = model_of(input.model.as_deref(), needs)?;
     match input.audio_format.as_deref() {
         Some("wav") => {}
         said => {
@@ -93,24 +87,8 @@ fn call(head: &mut RequestHead, input: &Input) -> Result<Box<dyn Encoder<Input>>
         return Err(invalid("speed", &format!("is not one {NAME} takes"))
             .with(ErrorCode("unsupported".into())));
     }
-    let body = serde_json::to_vec(&body_of(input)?)
-        .map_err(|e| Fault::internal("a body could not be written").with_source(e))?;
-    head.uri = format!("/models/{model}:generateContent")
-        .parse()
-        .map_err(|e| Fault::internal("a call's path is no path").with_source(e))?;
-    let json = HeaderValue::from_static("application/json");
-    head.headers.insert(CONTENT_TYPE, json);
-    Ok(sends(Bytes::from(body)))
-}
-
-/// A call's body: its turn, its `generationConfig`, and its native fields.
-fn body_of(input: &Input) -> Result<Map<String, Value>, Fault> {
     let mut native = kept(NAME, &input.native)?;
-    let mut config = match native.remove("generationConfig") {
-        Some(Value::Object(config)) => config,
-        None => Map::new(),
-        Some(_) => return Err(invalid("generationConfig", "must be an object")),
-    };
+    let mut config = config_of(&mut native)?;
     config.insert("responseModalities".into(), json!(["AUDIO"]));
     if let Some(voice) = &input.voice {
         let voice = json!({ "voiceConfig": { "prebuiltVoiceConfig": { "voiceName": voice } } });
@@ -120,16 +98,7 @@ fn body_of(input: &Input) -> Result<Map<String, Value>, Fault> {
         Some(how) => format!("{how}: {}", input.text),
         None => input.text.clone(),
     };
-    let mut v = Map::new();
-    v.insert(
-        "contents".into(),
-        json!([{ "role": "user", "parts": [{ "text": text }] }]),
-    );
-    v.insert("generationConfig".into(), config.into());
-    for (key, value) in native {
-        v.entry(key).or_insert(value);
-    }
-    Ok(v)
+    generate(head, model, json!([{ "text": text }]), config, native)
 }
 
 /// The events of an answer: its audio, as a `wav`, then its usage. One

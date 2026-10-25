@@ -164,28 +164,3 @@ the Gemini API's base (`x-goog-api-key`) or Vertex AI's.
   400 `unsupported`, before any call; an answer with no audio is 400
   `no_audio`.
 
-`gemini::VertexVeo`, named `vertex-veo`: Veo as Vertex AI serves it, to
-providers only, at
-`https://{location}-aiplatform.googleapis.com/v1/projects/{project}/locations/{location}/publishers/google`
-with a Google access token as the bearer key. Vertex polls with a `POST`
-of the operation's name, a call `gemini-veo` has none of, so it is a
-format of its own beside `gemini-veo`.
-
-- A `Create` is `POST /models/{model}:predictLongRunning`, as `gemini-veo`
-  writes it (`aspectRatio`, `resolution`, `durationSeconds`, a reference
-  image's base64 `image`, its `vertex-veo` native fields such as
-  `sampleCount` or `generateAudio` as parameters). A `storageUri` is refused,
-  400 `unsupported`: without one Vertex answers the video's bytes, and a
-  bucket needs its own credentials to be read.
-- A job's id is `vertex_veo_` and the operation's name,
-  `projects/{p}/locations/{l}/publishers/google/models/{m}/operations/{o}`,
-  in unpadded base64url (`VertexVeo::job_id`, `VertexVeo::operation`).
-  Retrieving is `POST /models/{model}:fetchPredictOperation` with
-  `{"operationName": ..}`. Done with `response.videos` is `completed`;
-  done with an error, or with no video (`raiMediaFilteredReasons`),
-  `failed`.
-- Content is that operation fetched again, its first video's
-  `bytesBase64Encoded` the bytes: no `LocateContent` is needed. Not done is
-  400 `video_not_ready`; a video held only at a `gcsUri` is a 502.
-- Remix, delete, list, thumbnails and spritesheets are refused, 400
-  `unsupported`, before any call.

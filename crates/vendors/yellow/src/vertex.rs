@@ -1,5 +1,5 @@
 //! Google Vertex AI: at a project and location, Gemini's `generateContent`
-//! (chats, images, speech and transcriptions), Veo, Claude in Anthropic's Messages,
+//! (chats, images, speech and transcriptions), Claude in Anthropic's Messages,
 //! and the other models of its Model Garden in Chat Completions; Gemini's
 //! embeddings in OpenAI's; with a Google access token. And its express mode
 //! ([`EXPRESS`]): Gemini's `generateContent`, for chats and images, with an
@@ -16,9 +16,7 @@ use respan_gateway_http::bytes::Bytes;
 use respan_gateway_http::http::request::Parts as RequestHead;
 use respan_gateway_http::path::set_path;
 use respan_gateway_media::{embedding, image, speech, transcription};
-use respan_gateway_media_http::gemini::{
-    GeminiImages, GeminiSpeech, GeminiTranscriptions, VertexVeo,
-};
+use respan_gateway_media_http::gemini::{GeminiImages, GeminiSpeech, GeminiTranscriptions};
 use respan_gateway_media_http::openai::OpenAiEmbeddings;
 use serde_json::{Map, Value};
 
@@ -88,7 +86,6 @@ pub const VENDOR: Vendor = Vendor {
             Some(API),
         ),
         (&Dialected::new(GeminiSpeech, Speech), Some(API)),
-        (&VertexVeo, Some(API)),
         (&Dialected::new(AnthropicMessages, Claude), Some(ANTHROPIC)),
         (&Dialected::new(OpenAiChat, OpenApi), Some(LOCATION)),
         (
