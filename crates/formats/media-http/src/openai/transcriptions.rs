@@ -122,7 +122,7 @@ fn decode_request(head: &RequestHead, form: &Form) -> Result<Input, Fault> {
 }
 
 /// The call of `input`: a form of its audio and fields.
-pub(crate) fn post(
+fn post(
     head: &mut RequestHead,
     input: &Input,
     stream: bool,
@@ -172,7 +172,7 @@ fn read_response(head: &http::response::Parts) -> Box<dyn Decoder<Output>> {
 }
 
 /// The events of a whole JSON body.
-pub(crate) fn decode_json(raw: Bytes, out: &mut Vec<Output>) -> Result<(), Fault> {
+fn decode_json(raw: Bytes, out: &mut Vec<Output>) -> Result<(), Fault> {
     let v = whole_json(NAME, raw, |v| v["text"].is_string())?;
     let mut transcript = Transcript::new(v["text"].as_str().unwrap_or_default());
     transcript.language = v["language"].as_str().map(Into::into);

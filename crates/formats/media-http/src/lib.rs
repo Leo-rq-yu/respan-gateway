@@ -5,13 +5,10 @@
 //!   serve them, one format per kind.
 //! - [`gemini`]: Google's Veo and image models, as the Gemini API serves
 //!   them, of the video and image kinds.
-//! - [`empiriolabs`]: EmpirioLabs AI's video and transcription APIs, which
-//!   answer as jobs, providers of those kinds.
 //!
 //! A vendor's departures from one of them are its dialect of it, laid over
 //! it ([`respan_gateway_http::dialect`]).
 
 mod edge;
-pub mod empiriolabs;
 pub mod gemini;
 pub mod openai;

@@ -647,16 +647,9 @@ fn empiriolabs_is_called_at_each_of_its_apis() {
             ("openai-images", api),
             ("openai-embeddings", api),
             ("openai-speech", api),
-            ("empiriolabs-transcriptions", api),
-            ("empiriolabs-videos", api),
             ("decisions", api),
         ]
     );
-    // Its own formats are spoken only to it: a client of transcriptions or
-    // videos speaks OpenAI's, or Veo's.
-    assert!(!plan.serves("empiriolabs-transcriptions"));
-    assert!(!plan.serves("empiriolabs-videos"));
-    assert!(plan.serves("openai-transcriptions") && plan.serves("openai-videos"));
 }
 
 #[test]
