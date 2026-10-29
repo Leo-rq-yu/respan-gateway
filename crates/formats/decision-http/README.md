@@ -4,7 +4,7 @@
 
 | Format | Endpoint | Served by |
 | --- | --- | --- |
-| `openai-decisions` (`OpenAiDecisions`) | `POST /openai/v1/decisions` in the standalone gateway | Azure OpenAI (`vendor = "azure"`) |
+| `openai-decisions` (`OpenAiDecisions`) | `POST /openai/v1/decisions` in the standalone gateway | OpenAI (`vendor = "openai"`); Azure OpenAI (`vendor = "azure"`) |
 | `decisions` (`Decisions`) | `POST /v1/decisions`, `POST /v1/systemone` | Respan (`vendor = "respan"`); TypeSafe (`vendor = "typesafe"`), at `/systemone`; EmpirioLabs AI (`vendor = "empiriolabs"`); or any compatible base URL |
 
 A provider is called at `/decisions`. A vendor that departs from the

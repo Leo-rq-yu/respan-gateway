@@ -264,6 +264,11 @@ fn a_vendor_is_every_format_it_speaks() {
                 "openai:openai-embeddings",
                 "https://api.openai.com/v1"
             ),
+            entry(
+                "openai-decisions",
+                "openai:openai-decisions",
+                "https://api.openai.com/v1"
+            ),
         ]
     );
     assert_eq!(
@@ -303,8 +308,8 @@ fn a_vendor_is_every_format_it_speaks() {
     );
     assert_eq!(header(1, 4, "x-goog-api-key").as_deref(), Some("AIza"));
     assert!(plan.upstreams.iter().all(|u| u.own_key));
-    // Served by default: the chat formats, each chat, media and realtime client
-    // format, and Responses over WebSocket.
+    // Served by default: the chat formats, each chat, media, realtime and
+    // decision client format, and Responses over WebSocket.
     assert_eq!(
         plan.serve,
         [
@@ -322,6 +327,8 @@ fn a_vendor_is_every_format_it_speaks() {
             "gemini-live",
             "mistral-realtime",
             "gemini-veo",
+            "decisions",
+            "openai-decisions",
             "responses-ws"
         ]
     );
@@ -931,6 +938,65 @@ async fn azure_decisions_uses_the_reserved_path_and_api_key() {
             assert!(headers.get("authorization").is_none());
             assert_eq!(body["model"], "deployment");
         }
+    }
+    server.abort();
+}
+
+#[tokio::test]
+async fn openai_decisions_go_to_openai_with_a_bearer_key() {
+    use axum::{Json, Router, extract::State, routing::post as route_post};
+    use serde_json::{Value, json};
+    use std::sync::{Arc, Mutex};
+    type Captured = Arc<Mutex<Vec<(http::HeaderMap, Value)>>>;
+    async fn fake(
+        State(seen): State<Captured>,
+        headers: http::HeaderMap,
+        Json(body): Json<Value>,
+    ) -> Json<Value> {
+        let answers: Vec<Value> = (body["questions"].as_array().into_iter().flatten())
+            .map(|q| json!({"type": "predicate", "name": q["name"], "probability": 0.7}))
+            .collect();
+        seen.lock().expect("capture").push((headers, body));
+        Json(
+            json!({"model":"gpt-6-luna", "answers": answers, "usage":{"input_tokens":4,"output_tokens":0}}),
+        )
+    }
+    let seen: Captured = Arc::default();
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("listener");
+    let addr = listener.local_addr().expect("address");
+    let server = tokio::spawn(
+        axum::serve(
+            listener,
+            Router::new()
+                .route("/v1/decisions", route_post(fake))
+                .with_state(seen.clone()),
+        )
+        .into_future(),
+    );
+    let text = format!(
+        "providers = {{ openai = {{ vendor = \"openai\", base_url = \"http://{addr}/v1\", key = \"provider-secret\", formats = [\"openai-decisions\"] }} }}\nformats = [\"openai-decisions\"]\n"
+    );
+    let gateway = resolve(&text).expect("gateway");
+    let body = json!({"model":"openai/gpt-6-luna","input":"hello","questions":[{"type":"predicate","instructions":"is it true?"}]});
+    let (resp, _) = serve(&gateway, post("/openai/v1/decisions", body.to_string())).await;
+    let (status, _, body) = read_whole(resp).await;
+    assert_eq!(status, StatusCode::OK, "{body:?}");
+    let result: Value = serde_json::from_slice(&body.expect("response body")).expect("json");
+    assert_eq!(result["answers"][0]["probability"], 0.7);
+    gateway.idle().await;
+    {
+        let captured = seen.lock().expect("capture");
+        let [(headers, body)] = captured.as_slice() else {
+            panic!("one call: {captured:?}");
+        };
+        assert_eq!(
+            headers.get("authorization").and_then(|v| v.to_str().ok()),
+            Some("Bearer provider-secret")
+        );
+        assert!(headers.get("api-key").is_none());
+        assert_eq!(body["model"], "gpt-6-luna");
     }
     server.abort();
 }
