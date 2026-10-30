@@ -1,6 +1,6 @@
 //! Google's Gemini API: Chat Completions and embeddings at its
 //! OpenAI-compatible base, and its own API beside it: `generateContent`,
-//! for chats and images, Gemini Live and Veo.
+//! for chats, images, speech and transcriptions, Gemini Live and Veo.
 
 use respan_gateway_conversation::{Content, Input, Output, Role};
 use respan_gateway_conversation_http::Schema;
@@ -9,13 +9,16 @@ use serde_json::{Map, Value, json};
 
 use respan_gateway_conversation_http::gemini::{GeminiGenerate, needs_signatures};
 use respan_gateway_conversation_http::openai::OpenAiChat;
-use respan_gateway_media_http::gemini::{GeminiImages, GeminiVeo};
+use respan_gateway_media::transcription;
+use respan_gateway_media_http::gemini::{
+    GeminiImages, GeminiSpeech, GeminiTranscriptions, GeminiVeo,
+};
 use respan_gateway_media_http::openai::OpenAiEmbeddings;
 use respan_gateway_realtime_ws::GeminiLive;
 
 use respan_gateway_vendor_kit::{
     Body, BoxFuture, Capability, Dialect, Dialected, Model, Models, Vendor, VendorProvider,
-    built_wrong, http, json as body_json, models,
+    built_wrong, http, json as body_json, models, transcription as text_only,
 };
 
 /// Its own API: `generateContent` and Veo.
@@ -40,12 +43,31 @@ pub const VENDOR: Vendor = Vendor {
         (&Dialected::new(OpenAiChat, Gemini), Some(OPENAI_API)),
         (&GeminiLive, Some(LIVE)),
         (&GeminiImages, Some(API)),
+        (
+            &Dialected::new(GeminiTranscriptions, Transcriptions),
+            Some(API),
+        ),
+        (&GeminiSpeech, Some(API)),
         (&GeminiVeo, Some(API)),
         (&OpenAiEmbeddings, Some(OPENAI_API)),
     ],
     models: list_models,
     ..Vendor::DEFAULT
 };
+
+/// Gemini's transcriptions: the text alone, so the client's other fields
+/// are refused ([`text_only::text_only`]).
+#[derive(Debug, Clone, Copy)]
+pub struct Transcriptions;
+
+impl Dialect for Transcriptions {
+    type Input = transcription::Input;
+    type Output = transcription::Output;
+
+    fn inputs(&self) -> Option<Box<dyn Filter<transcription::Input>>> {
+        Some(Box::new(text_only::text_only))
+    }
+}
 
 /// What a Gemini 3 model accepts as the signature of a function call made
 /// elsewhere, as Google documents it.

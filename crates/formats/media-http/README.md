@@ -139,6 +139,37 @@ at `https://generativelanguage.googleapis.com/v1beta` with the key in
   `raiMediaFilteredReasons`; a refusal is Google's `{"error": {code,
   message, status}}`. Veo reports no progress: an operation is done or not.
 
+`gemini::GeminiTranscriptions`, named `gemini-transcriptions`: a Gemini
+model as a transcriber, through `generateContent`, to providers only.
+
+- A call is `POST /models/{model}:generateContent`, one user turn of the
+  audio (`inlineData`, or `fileData` for audio at a URL) and a text
+  instruction that asks for the words spoken, or for a translation to
+  English, and names the `language` and `prompt`; the `temperature` is a
+  `generationConfig`'s. Its native fields go in the body.
+- Audio inline is refused over 20 MB, the most a Gemini request holds
+  (400, before any call). Gemini gives the text alone, so a vendor's
+  dialect takes of an OpenAI client's native fields only `response_format`
+  `json` and `text` and refuses the rest, 400 `unsupported`.
+- The answer's text, not its thoughts', is the transcript, as is a
+  transcribing model's `audioTranscription` part, and its `usageMetadata`
+  is token usage. An answer with no text and a block or finish reason is
+  400 `no_transcript`.
+
+`gemini::GeminiSpeech`, named `gemini-speech`: Gemini's speech models
+(`gemini-3.8-flash-tts`) through `generateContent`, to providers only.
+
+- A call is `POST /models/{model}:generateContent`, one user turn of the
+  text, `{instructions}: {text}` if it has instructions, asking for audio
+  (`responseModalities: ["AUDIO"]`) in the voice named, a
+  `speechConfig`'s `prebuiltVoiceConfig.voiceName`, such as `Kore`. Its
+  native fields go in the body.
+- It speaks a WAV of 16-bit mono PCM at the rate it says (24 kHz), a
+  header put before samples it answers bare (`audio/L16`). Another
+  `response_format`, or none (OpenAI's `mp3`), and a `speed` are refused,
+  400 `unsupported`, before any call; an answer with no audio is 400
+  `no_audio`.
+
 `bedrock::BedrockEmbeddings`, named `bedrock-embeddings`: Amazon Bedrock's
 embedding models on InvokeModel, `POST /model/{model}/invoke`, as a provider
 only, its key a Bedrock API key as a bearer token.
