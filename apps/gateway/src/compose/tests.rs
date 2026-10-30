@@ -1000,3 +1000,85 @@ async fn openai_decisions_go_to_openai_with_a_bearer_key() {
     }
     server.abort();
 }
+
+#[tokio::test]
+async fn fireworks_answers_each_decision_contract_in_its_own() {
+    use axum::{Json, Router, extract::State, routing::post as route_post};
+    use serde_json::{Value, json};
+    use std::sync::{Arc, Mutex};
+    type Captured = Arc<Mutex<Vec<(&'static str, http::HeaderMap, Value)>>>;
+    async fn system_one(
+        State(seen): State<Captured>,
+        headers: http::HeaderMap,
+        Json(body): Json<Value>,
+    ) -> Json<Value> {
+        seen.lock()
+            .expect("capture")
+            .push(("/systemone", headers, body));
+        Json(
+            json!({"model":"accounts/fireworks/models/rune", "answers":{"q1":{"type":"noul","noul":0.9}}, "usage":{"input_tokens":4,"output_tokens":0}}),
+        )
+    }
+    async fn openai(
+        State(seen): State<Captured>,
+        headers: http::HeaderMap,
+        Json(body): Json<Value>,
+    ) -> Json<Value> {
+        let answers: Vec<Value> = (body["questions"].as_array().into_iter().flatten())
+            .map(|q| json!({"type": "predicate", "name": q["name"], "probability": 0.7}))
+            .collect();
+        seen.lock()
+            .expect("capture")
+            .push(("/decisions", headers, body));
+        Json(
+            json!({"model":"accounts/fireworks/models/rune", "answers": answers, "usage":{"input_tokens":4,"output_tokens":0}}),
+        )
+    }
+    let seen: Captured = Arc::default();
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("listener");
+    let addr = listener.local_addr().expect("address");
+    let server = tokio::spawn(
+        axum::serve(
+            listener,
+            Router::new()
+                .route("/inference/v1/systemone", route_post(system_one))
+                .route("/inference/v1/decisions", route_post(openai))
+                .with_state(seen.clone()),
+        )
+        .into_future(),
+    );
+    let text = format!(
+        "providers = {{ fireworks = {{ vendor = \"fireworks\", base_url = \"http://{addr}/inference/v1\", key = \"provider-secret\" }} }}\nformats = [\"decisions\", \"openai-decisions\"]\n"
+    );
+    let gateway = resolve(&text).expect("gateway");
+    let model = "fireworks/accounts/fireworks/models/rune";
+    let asked = json!({"model": model, "state":"hello", "questions":{"q1":{"type":"noul","instructions":"is it true?","criteria":{"true":"yes","false":"no"}}}});
+    let (resp, _) = serve(&gateway, post("/v1/decisions", asked.to_string())).await;
+    let (status, _, body) = read_whole(resp).await;
+    assert_eq!(status, StatusCode::OK, "{body:?}");
+    let result: Value = serde_json::from_slice(&body.expect("response body")).expect("json");
+    assert_eq!(result["answers"]["q1"]["noul"], 0.9);
+    let asked = json!({"model": model, "input":"hello", "questions":[{"type":"predicate","instructions":"is it true?"}]});
+    let (resp, _) = serve(&gateway, post("/openai/v1/decisions", asked.to_string())).await;
+    let (status, _, body) = read_whole(resp).await;
+    assert_eq!(status, StatusCode::OK, "{body:?}");
+    let result: Value = serde_json::from_slice(&body.expect("response body")).expect("json");
+    assert_eq!(result["answers"][0]["probability"], 0.7);
+    gateway.idle().await;
+    {
+        let captured = seen.lock().expect("capture");
+        let [(first, headers, body), (second, _, _)] = captured.as_slice() else {
+            panic!("two calls: {captured:?}");
+        };
+        assert_eq!((*first, *second), ("/systemone", "/decisions"));
+        assert_eq!(
+            headers.get("authorization").and_then(|v| v.to_str().ok()),
+            Some("Bearer provider-secret")
+        );
+        assert_eq!(body["model"], "accounts/fireworks/models/rune");
+        assert_eq!(body["questions"]["q1"]["criteria"]["true"], "yes");
+    }
+    server.abort();
+}
