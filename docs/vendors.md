@@ -49,8 +49,8 @@ Each vendor is in one of two tiers:
 | <img src="assets/vendors/cerebras.svg" width="20" height="20" alt=""> | Cerebras | `cerebras` | `CEREBRAS_API_KEY` | `openai-chat` |
 | <img src="assets/vendors/perplexity.svg" width="20" height="20" alt=""> | Perplexity | `perplexity` | `PERPLEXITY_API_KEY` | `openai-responses` |
 | <img src="assets/vendors/empiriolabs.png" width="20" height="20" alt=""> | EmpirioLabs AI | `empiriolabs` | `EMPIRIOLABS_API_KEY` | `openai-chat`, `openai-responses`, `anthropic-messages`, `gemini-generate`, `openai-images`, `openai-embeddings`, `openai-speech`, `decisions` |
-| <img src="assets/vendors/gemini.svg" width="20" height="20" alt=""> | Google Vertex AI | `vertex` | `GOOGLE_VERTEX_ACCESS_TOKEN` or `CLOUDSDK_AUTH_ACCESS_TOKEN` | `gemini-generate`, `anthropic-messages`, `openai-chat`, `openai-embeddings` |
-| <img src="assets/vendors/gemini.svg" width="20" height="20" alt=""> | Vertex AI express mode | `vertex-express` | `GOOGLE_VERTEX_API_KEY` | `gemini-generate` |
+| <img src="assets/vendors/gemini.svg" width="20" height="20" alt=""> | Google Vertex AI | `vertex` | `GOOGLE_VERTEX_ACCESS_TOKEN` or `CLOUDSDK_AUTH_ACCESS_TOKEN` | `gemini-generate`, `gemini-images`, `gemini-speech`, `gemini-transcriptions`, `anthropic-messages`, `openai-chat`, `openai-embeddings` |
+| <img src="assets/vendors/gemini.svg" width="20" height="20" alt=""> | Vertex AI express mode | `vertex-express` | `GOOGLE_VERTEX_API_KEY` | `gemini-generate`, `gemini-images` |
 | <img src="assets/vendors/deepinfra.svg" width="20" height="20" alt=""> | DeepInfra | `deepinfra` | `DEEPINFRA_API_KEY` | `openai-chat`, `openai-images`, `openai-embeddings`, `openai-speech`, `openai-transcriptions`, `openai-videos` |
 
 These tables are kept by hand: a vendor added to `ALL` in
@@ -98,7 +98,8 @@ runtime.
 Vertex AI's formats are under a project's location,
 `https://{location}-aiplatform.googleapis.com/v1/projects/{project}/locations/{location}`
 (`https://aiplatform.googleapis.com/..` for the `global` location), each
-with a Google access token as the bearer key: `gemini-generate` at
+with a Google access token as the bearer key: `gemini-generate`,
+`gemini-images`, `gemini-speech` and `gemini-transcriptions` at
 `/publishers/google`; `anthropic-messages` at `/publishers/anthropic`,
 Claude's, each call posted to the model's `rawPredict` (or
 `streamRawPredict`) with `anthropic_version` in the body and no model;
@@ -118,8 +119,11 @@ expires within the hour: the gateway sends the one it is given, so whoever
 runs it gives it a fresh one, such as `gcloud auth print-access-token`
 prints, in a config file it reloads. Express mode, `vertex-express`, takes
 an API key that does not expire, in `x-goog-api-key`, for
-`gemini-generate` at `https://aiplatform.googleapis.com/v1/publishers/google`,
-under no project; it lists no models.
+`gemini-generate` and `gemini-images` at
+`https://aiplatform.googleapis.com/v1/publishers/google`, under no project;
+it lists no models. Imagen's `:predict` is not spoken, as Vertex AI lists
+no Imagen model any more, nor is Veo: Vertex polls its operation with a
+`POST`, which `gemini-veo` has no call for.
 
 Respan's formats sit under one API, `https://api.respan.ai/api`:
 `openai-chat` and `openai-responses` at it, `anthropic-messages` at

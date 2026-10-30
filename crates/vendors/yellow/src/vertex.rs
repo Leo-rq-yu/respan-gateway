@@ -1,8 +1,9 @@
-//! Google Vertex AI: at a project and location, Gemini's `generateContent`,
-//! Claude in Anthropic's Messages, and the other models of its Model Garden
-//! in Chat Completions; Gemini's embeddings in OpenAI's; with a Google
-//! access token. And its express mode ([`EXPRESS`]): Gemini's
-//! `generateContent` alone, with an API key.
+//! Google Vertex AI: at a project and location, Gemini's `generateContent`
+//! (chats, images, speech and transcriptions), Claude in Anthropic's Messages,
+//! and the other models of its Model Garden in Chat Completions; Gemini's
+//! embeddings in OpenAI's; with a Google access token. And its express mode
+//! ([`EXPRESS`]): Gemini's `generateContent`, for chats and images, with an
+//! API key.
 
 use respan_gateway_conversation::{Input, Output};
 use respan_gateway_conversation_http::Schema;
@@ -14,13 +15,14 @@ use respan_gateway_core::{Fault, Filter};
 use respan_gateway_http::bytes::Bytes;
 use respan_gateway_http::http::request::Parts as RequestHead;
 use respan_gateway_http::path::set_path;
-use respan_gateway_media::embedding;
+use respan_gateway_media::{embedding, image, speech, transcription};
+use respan_gateway_media_http::gemini::{GeminiImages, GeminiSpeech, GeminiTranscriptions};
 use respan_gateway_media_http::openai::OpenAiEmbeddings;
 use serde_json::{Map, Value};
 
 use respan_gateway_vendor_kit::{
     Ask, Body, BoxFuture, Dialect, Dialected, KeyIn, Model, Models, Rewrite, Vendor,
-    VendorProvider, built_wrong, http, json as body_json, located,
+    VendorProvider, built_wrong, http, json as body_json, located, transcription as text_only,
 };
 
 /// A project's location, under which each of its APIs is.
@@ -78,6 +80,12 @@ pub const VENDOR: Vendor = Vendor {
     key_env: &["GOOGLE_VERTEX_ACCESS_TOKEN", "CLOUDSDK_AUTH_ACCESS_TOKEN"],
     formats: &[
         (&Dialected::new(GeminiGenerate, Vertex), Some(API)),
+        (&Dialected::new(GeminiImages, Images), Some(API)),
+        (
+            &Dialected::new(GeminiTranscriptions, Transcriptions),
+            Some(API),
+        ),
+        (&Dialected::new(GeminiSpeech, Speech), Some(API)),
         (&Dialected::new(AnthropicMessages, Claude), Some(ANTHROPIC)),
         (&Dialected::new(OpenAiChat, OpenApi), Some(LOCATION)),
         (
@@ -91,13 +99,17 @@ pub const VENDOR: Vendor = Vendor {
 };
 
 /// Vertex AI in express mode: Gemini's `generateContent` under no project,
-/// with an API key in `x-goog-api-key`, as Gemini's API takes it. It lists
-/// no models, as its API serves `generateContent`, `streamGenerateContent`
-/// and `countTokens` alone.
+/// for chats and Gemini's image models, with an API key in
+/// `x-goog-api-key`, as Gemini's API takes it. It lists no models, as its
+/// API serves `generateContent`, `streamGenerateContent` and `countTokens`
+/// alone.
 pub const EXPRESS: Vendor = Vendor {
     id: "vertex-express",
     key_env: &["GOOGLE_VERTEX_API_KEY"],
-    formats: &[(&GeminiGenerate, Some(EXPRESS_API))],
+    formats: &[
+        (&GeminiGenerate, Some(EXPRESS_API)),
+        (&GeminiImages, Some(EXPRESS_API)),
+    ],
     models: list_none,
     ..Vendor::DEFAULT
 };
@@ -148,6 +160,51 @@ pub struct Vertex;
 impl Dialect for Vertex {
     type Input = Input;
     type Output = Output;
+
+    fn key(&self) -> Option<KeyIn> {
+        Some(KeyIn::Bearer)
+    }
+}
+
+/// Vertex's Gemini images: their key a bearer token.
+#[derive(Debug, Clone, Copy)]
+pub struct Images;
+
+impl Dialect for Images {
+    type Input = image::Input;
+    type Output = image::Output;
+
+    fn key(&self) -> Option<KeyIn> {
+        Some(KeyIn::Bearer)
+    }
+}
+
+/// Vertex's Gemini speech: its key a bearer token.
+#[derive(Debug, Clone, Copy)]
+pub struct Speech;
+
+impl Dialect for Speech {
+    type Input = speech::Input;
+    type Output = speech::Output;
+
+    fn key(&self) -> Option<KeyIn> {
+        Some(KeyIn::Bearer)
+    }
+}
+
+/// Vertex's Gemini transcriptions: the text alone, so the client's other
+/// fields are refused ([`text_only::text_only`]), and the key a bearer
+/// token.
+#[derive(Debug, Clone, Copy)]
+pub struct Transcriptions;
+
+impl Dialect for Transcriptions {
+    type Input = transcription::Input;
+    type Output = transcription::Output;
+
+    fn inputs(&self) -> Option<Box<dyn Filter<transcription::Input>>> {
+        Some(Box::new(text_only::text_only))
+    }
 
     fn key(&self) -> Option<KeyIn> {
         Some(KeyIn::Bearer)
@@ -401,7 +458,7 @@ mod tests {
         );
         let formats = VENDOR.formats.iter().map(|(f, _)| f.key());
         assert!(formats.clone().all(|key| key == KeyIn::Bearer));
-        assert_eq!(formats.count(), 4);
+        assert_eq!(formats.count(), 7);
         assert_eq!(
             Upstream::key(&GeminiGenerate),
             KeyIn::Header("x-goog-api-key")

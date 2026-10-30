@@ -140,7 +140,8 @@ at `https://generativelanguage.googleapis.com/v1beta` with the key in
   message, status}}`. Veo reports no progress: an operation is done or not.
 
 `gemini::GeminiTranscriptions`, named `gemini-transcriptions`: a Gemini
-model as a transcriber, through `generateContent`, to providers only.
+model as a transcriber, through `generateContent`, to providers only, at
+the Gemini API's base (`x-goog-api-key`) or Vertex AI's.
 
 - A call is `POST /models/{model}:generateContent`, one user turn of the
   audio (`inlineData`, or `fileData` for audio at a URL) and a text
@@ -157,7 +158,8 @@ model as a transcriber, through `generateContent`, to providers only.
   400 `no_transcript`.
 
 `gemini::GeminiSpeech`, named `gemini-speech`: Gemini's speech models
-(`gemini-3.8-flash-tts`) through `generateContent`, to providers only.
+(`gemini-3.8-flash-tts`) through `generateContent`, to providers only, at
+the Gemini API's base (`x-goog-api-key`) or Vertex AI's.
 
 - A call is `POST /models/{model}:generateContent`, one user turn of the
   text, `{instructions}: {text}` if it has instructions, asking for audio

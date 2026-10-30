@@ -1093,13 +1093,8 @@ fn vertex_express_takes_an_api_key_under_no_project() {
         .iter()
         .map(|e| (e.format.as_str(), e.base_url.as_str()))
         .collect();
-    assert_eq!(
-        entries,
-        [(
-            "gemini-generate",
-            "https://aiplatform.googleapis.com/v1/publishers/google"
-        )]
-    );
+    let at = "https://aiplatform.googleapis.com/v1/publishers/google";
+    assert_eq!(entries, [("gemini-generate", at), ("gemini-images", at)]);
     let parts = express.provider.parts().unwrap_or_default();
     let key = parts.first().and_then(|p| p.headers.get("x-goog-api-key"));
     assert_eq!(key.and_then(|v| v.to_str().ok()), Some("AQ.k"));
