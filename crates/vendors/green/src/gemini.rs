@@ -14,9 +14,10 @@ use respan_gateway_media_http::gemini::{GeminiImages, GeminiTranscriptions, Gemi
 use respan_gateway_media_http::openai::OpenAiEmbeddings;
 use respan_gateway_realtime_ws::GeminiLive;
 
+use respan_gateway_vendor_kit::transcription::text_only;
 use respan_gateway_vendor_kit::{
     Body, BoxFuture, Capability, Dialect, Dialected, Model, Models, Vendor, VendorProvider,
-    built_wrong, http, json as body_json, models, transcription as text_only,
+    built_wrong, http, json as body_json, models,
 };
 
 /// Its own API: `generateContent` and Veo.
@@ -53,7 +54,7 @@ pub const VENDOR: Vendor = Vendor {
 };
 
 /// Gemini's transcriptions: the text alone, so the client's other fields
-/// are refused ([`text_only::text_only`]).
+/// are refused ([`text_only`]).
 #[derive(Debug, Clone, Copy)]
 pub struct Transcriptions;
 
@@ -62,7 +63,7 @@ impl Dialect for Transcriptions {
     type Output = transcription::Output;
 
     fn inputs(&self) -> Option<Box<dyn Filter<transcription::Input>>> {
-        Some(Box::new(text_only::text_only))
+        Some(Box::new(text_only))
     }
 }
 

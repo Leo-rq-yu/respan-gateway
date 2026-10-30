@@ -147,11 +147,11 @@ model as a transcriber, through `generateContent`, to providers only.
   instruction that asks for the words spoken, or for a translation to
   English, and names the `language` and `prompt`; the `temperature` is a
   `generationConfig`'s. Its native fields go in the body.
-- Audio inline is refused over 20 MB, the most a Gemini request holds
-  (400, before any call). Gemini gives the text alone, so a vendor's
+- Audio inline is refused over 20 MB once base64-encoded, the most a
+  Gemini request holds (400, before any call). Gemini gives the text alone, so a vendor's
   dialect takes of an OpenAI client's native fields only `response_format`
   `json` and `text` and refuses the rest, 400 `unsupported`.
-- The answer's text, not its thoughts', is the transcript, as is a
+- The first candidate's text, not its thoughts', is the transcript, as is a
   transcribing model's `audioTranscription` part, and its `usageMetadata`
   is token usage. An answer with no text and a block or finish reason is
   400 `no_transcript`.

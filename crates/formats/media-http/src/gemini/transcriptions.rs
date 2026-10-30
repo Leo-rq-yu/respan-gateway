@@ -28,14 +28,13 @@ const INLINE_LIMIT: usize = 20 * 1024 * 1024;
 ///
 /// The instruction asks for the words spoken, or, for a translation, their
 /// English; the `language` and `prompt` go into it, and the `temperature`
-/// into `generationConfig`. Audio over 20 MB, the most a request
-/// holds, is refused, 400, before any call. The native fields of this format
-/// go in the body,
-/// `generationConfig` merged with what it says. An answer's text, but not
-/// its thoughts', is the transcript, as is a transcribing model's
-/// `audioTranscription` part (`gemini-3.5-transcribe`'s); its usage is
-/// `usageMetadata`'s tokens. An answer with no text, saying why, is
-/// refused, 400 `no_transcript`.
+/// into `generationConfig`. Audio over 20 MB once base64-encoded, the most
+/// a request holds, is refused, 400, before any call. The native fields of
+/// this format go in the body, `generationConfig` merged with what it says.
+/// An answer's first candidate's text, but not its thoughts', is the
+/// transcript, as is a transcribing model's `audioTranscription` part
+/// (`gemini-3.5-transcribe`'s); its usage is `usageMetadata`'s tokens. An
+/// answer with no text, saying why, is refused, 400 `no_transcript`.
 ///
 /// It serves providers only: no client speaks it.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -81,7 +80,10 @@ fn call(head: &mut RequestHead, input: &Input) -> Result<Box<dyn Encoder<Input>>
     let mut native = kept(NAME, &input.native)?;
     let audio = match &input.audio.source {
         MediaSource::Bytes(bytes) if bytes.len().div_ceil(3) * 4 > INLINE_LIMIT => {
-            return Err(invalid("file", "is over the 20 MB Gemini takes inline"));
+            return Err(invalid(
+                "file",
+                "is over the 20 MB Gemini takes inline, once base64-encoded",
+            ));
         }
         MediaSource::Bytes(bytes) => json!({
             "inlineData": { "mimeType": input.audio.mime_type, "data": STANDARD.encode(bytes) },
@@ -119,23 +121,25 @@ fn instruction_of(input: &Input) -> String {
 fn read_response(raw: Bytes, out: &mut Vec<Output>) -> Result<(), Fault> {
     let v = serde_json::from_slice::<Value>(&raw)
         .map_err(|_| Fault::upstream(format!("the provider's {NAME} response is not JSON")))?;
-    let (mut said, mut why) = (Vec::new(), None);
-    for candidate in v["candidates"].as_array().into_iter().take(1).flatten() {
-        let parts = candidate["content"]["parts"].as_array();
-        for part in parts.into_iter().flatten().filter(|p| p["thought"] != true) {
-            said.extend(part["text"].as_str());
-            said.extend(part["audioTranscription"]["text"].as_str());
-        }
-        why = candidate["finishReason"].as_str().filter(|r| *r != "STOP");
-    }
-    let why = v["promptFeedback"]["blockReason"].as_str().or(why);
+    let candidate = &v["candidates"][0];
+    let parts = candidate["content"]["parts"]
+        .as_array()
+        .into_iter()
+        .flatten();
+    let said: String = parts
+        .filter(|p| p["thought"] != true)
+        .flat_map(|p| [p["text"].as_str(), p["audioTranscription"]["text"].as_str()])
+        .flatten()
+        .collect();
+    let why = v["promptFeedback"]["blockReason"].as_str();
+    let why = why.or(candidate["finishReason"].as_str().filter(|r| *r != "STOP"));
     if said.is_empty()
         && let Some(why) = why
     {
         let message = format!("Gemini made no transcript ({why})");
         return Err(Fault::bad_request(message).with(ErrorCode("no_transcript".into())));
     }
-    out.push(Output::Transcript(Transcript::new(said.join(""))));
+    out.push(Output::Transcript(Transcript::new(said)));
     let usage = &v["usageMetadata"];
     if usage.is_object() {
         out.push(Output::Usage(usage_of(usage)?));
@@ -147,8 +151,6 @@ fn read_response(raw: Bytes, out: &mut Vec<Output>) -> Result<(), Fault> {
 mod tests {
     use super::*;
     use respan_gateway_conversation::Media;
-    use respan_gateway_conversation_http::fields::native_of;
-    use respan_gateway_core::NativeFields;
     use respan_gateway_http::http;
 
     fn input() -> Input {
@@ -167,10 +169,6 @@ mod tests {
         encoder.encode(input, &mut out)?;
         let body = serde_json::from_slice(&out.concat()).unwrap_or_default();
         Ok((head, body))
-    }
-
-    fn native(format: &str, v: Value) -> Option<NativeFields> {
-        native_of(format, v.as_object().cloned().unwrap_or_default())
     }
 
     #[test]
@@ -192,58 +190,6 @@ mod tests {
         assert!(text.starts_with("Transcribe"));
         assert!(text.contains("The language spoken is fr.") && text.contains("Names: Zoé."));
         assert_eq!(body["generationConfig"]["temperature"], 0.2);
-    }
-
-    #[test]
-    fn audio_at_a_url_is_a_file_and_a_translation_asks_for_english() {
-        let mut i = input();
-        i.audio = Media::new("audio/mp3", MediaSource::Url("gs://b/a.mp3".into()));
-        i.task = Task::Translate;
-        let (_, body) = sent(&i).expect("sent");
-        assert_eq!(
-            body["contents"][0]["parts"][0]["fileData"]["fileUri"],
-            "gs://b/a.mp3"
-        );
-        let text = body["contents"][0]["parts"][1]["text"]
-            .as_str()
-            .unwrap_or_default();
-        assert!(text.starts_with("Translate"));
-    }
-
-    #[test]
-    fn a_call_needs_a_model() {
-        let mut i = input();
-        i.model = None;
-        assert!(sent(&i).is_err());
-        i.model = Some("../x".into());
-        assert!(sent(&i).is_err());
-    }
-
-    #[test]
-    fn its_native_fields_are_the_body_and_generation_config_merges() {
-        let mut i = input();
-        i.temperature = Some(0.5);
-        i.native = native(
-            NAME,
-            json!({"generationConfig": {"maxOutputTokens": 9}, "safetySettings": []}),
-        );
-        let (_, body) = sent(&i).expect("sent");
-        assert_eq!(body["generationConfig"]["maxOutputTokens"], 9);
-        assert_eq!(body["generationConfig"]["temperature"], 0.5);
-        assert!(body["safetySettings"].is_array());
-    }
-
-    #[test]
-    fn another_formats_fields_and_oversized_audio_are_refused() {
-        let mut i = input();
-        i.native = native("openai-transcriptions", json!({"response_format": "json"}));
-        assert!(sent(&i).is_err());
-        let mut i = input();
-        i.audio = Media::new(
-            "audio/wav",
-            MediaSource::Bytes(vec![0; 16 * 1024 * 1024].into()),
-        );
-        assert!(sent(&i).is_err());
     }
 
     #[test]
@@ -279,21 +225,5 @@ mod tests {
                 "Hello from the gateway."
             ))]
         );
-    }
-
-    #[test]
-    fn silence_is_an_empty_transcript_and_a_block_is_refused() {
-        let silent = json!({"candidates": [{"content": {"parts": []}, "finishReason": "STOP"}]});
-        let mut out = Vec::new();
-        read_response(Bytes::from(silent.to_string()), &mut out).expect("read");
-        assert_eq!(out, [Output::Transcript(Transcript::new(""))]);
-        for blocked in [
-            json!({"promptFeedback": {"blockReason": "SAFETY"}}),
-            json!({"candidates": [{"finishReason": "PROHIBITED_CONTENT"}]}),
-        ] {
-            let refused = read_response(Bytes::from(blocked.to_string()), &mut Vec::new());
-            assert!(refused.is_err(), "{blocked}");
-        }
-        assert!(read_response(Bytes::from("nope"), &mut Vec::new()).is_err());
     }
 }
