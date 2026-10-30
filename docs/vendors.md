@@ -49,7 +49,7 @@ Each vendor is in one of two tiers:
 | <img src="assets/vendors/cerebras.svg" width="20" height="20" alt=""> | Cerebras | `cerebras` | `CEREBRAS_API_KEY` | `openai-chat` |
 | <img src="assets/vendors/perplexity.svg" width="20" height="20" alt=""> | Perplexity | `perplexity` | `PERPLEXITY_API_KEY` | `openai-responses` |
 | <img src="assets/vendors/empiriolabs.png" width="20" height="20" alt=""> | EmpirioLabs AI | `empiriolabs` | `EMPIRIOLABS_API_KEY` | `openai-chat`, `openai-responses`, `anthropic-messages`, `gemini-generate`, `openai-images`, `openai-embeddings`, `openai-speech`, `decisions` |
-| <img src="assets/vendors/gemini.svg" width="20" height="20" alt=""> | Google Vertex AI | `vertex` | `GOOGLE_VERTEX_ACCESS_TOKEN` or `CLOUDSDK_AUTH_ACCESS_TOKEN` | `gemini-generate` |
+| <img src="assets/vendors/gemini.svg" width="20" height="20" alt=""> | Google Vertex AI | `vertex` | `GOOGLE_VERTEX_ACCESS_TOKEN` or `CLOUDSDK_AUTH_ACCESS_TOKEN` | `gemini-generate`, `anthropic-messages`, `openai-chat`, `openai-embeddings` |
 | <img src="assets/vendors/gemini.svg" width="20" height="20" alt=""> | Vertex AI express mode | `vertex-express` | `GOOGLE_VERTEX_API_KEY` | `gemini-generate` |
 | <img src="assets/vendors/deepinfra.svg" width="20" height="20" alt=""> | DeepInfra | `deepinfra` | `DEEPINFRA_API_KEY` | `openai-chat`, `openai-images`, `openai-embeddings`, `openai-speech`, `openai-transcriptions`, `openai-videos` |
 
@@ -93,12 +93,25 @@ AWS's [`aws-sigv4-proxy`](https://github.com/awslabs/aws-sigv4-proxy) with
 with no key. Its models are then not listed, as the proxy reaches only the
 runtime.
 
-Vertex AI's `gemini-generate` is under a project's location, at
-`https://{location}-aiplatform.googleapis.com/v1/projects/{project}/locations/{location}/publishers/google`
-(`https://aiplatform.googleapis.com/..` for the `global` location), with a
-Google access token as the bearer key. Its models are Google's list
-(`/v1beta1/publishers/google/models`) of those it serves with no
-deployment of one's own; the list says no kind, limits or prices. The key
+Vertex AI's formats are under a project's location,
+`https://{location}-aiplatform.googleapis.com/v1/projects/{project}/locations/{location}`
+(`https://aiplatform.googleapis.com/..` for the `global` location), each
+with a Google access token as the bearer key: `gemini-generate` at
+`/publishers/google`; `anthropic-messages` at `/publishers/anthropic`,
+Claude's, each call posted to the model's `rawPredict` (or
+`streamRawPredict`) with `anthropic_version` in the body and no model;
+`openai-chat` at the location itself, posted to
+`/endpoints/openapi/chat/completions`, but a Mistral model's to its own
+`rawPredict` at `/publishers/mistralai`; and `openai-embeddings` at
+`/endpoints/openapi`. Its models are each publisher's list
+(`/v1beta1/publishers/{publisher}/models`) of those it serves with no
+deployment of one's own: Google's and Anthropic's named as they are, and
+sent in their own formats, the others' as `{publisher}/{model}`, such as
+`meta/llama-4-maverick-17b-128e-instruct-maas`, in Chat Completions; a
+Google model is `google/{model}` there, which the gateway writes for it. A
+model whose publisher is also a provider's name, such as `openai`, is
+asked for as `vertex/openai/gpt-oss-120b-maas`. The lists say no kind,
+limits or prices. The key
 expires within the hour: the gateway sends the one it is given, so whoever
 runs it gives it a fresh one, such as `gcloud auth print-access-token`
 prints, in a config file it reloads. Express mode, `vertex-express`, takes

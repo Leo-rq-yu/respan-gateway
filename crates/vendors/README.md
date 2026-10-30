@@ -46,7 +46,8 @@ departing from a spec it speaks, and its file handles it:
   (`respan_gateway_http::dialect`) laid over Chat Completions: its inputs
   before the format writes them and its outputs after the format reads
   them, as the kind's values; the call and its answer on the wire, their
-  heads and whole bodies; and the header it takes its key in if not the
+  heads and whole bodies, as Vertex AI posts Claude's Messages to the
+  model's `rawPredict`; and the header it takes its key in if not the
   spec's. A dialect says how the vendor departs from the spec, never who
   the client is. The vendor lists it as
   `(&Dialected::new(OpenAiChat, Groq), Some(BASE_URL))`, a format of the
