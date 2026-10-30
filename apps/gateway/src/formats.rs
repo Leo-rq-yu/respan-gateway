@@ -18,7 +18,9 @@ use respan_gateway_decision_http::{Decisions, OpenAiDecisions};
 use respan_gateway_http::{ClientIo, ProviderIo, raw::Original};
 use respan_gateway_media::{embedding, image, speech, transcription, video};
 use respan_gateway_media_http::bedrock::BedrockEmbeddings;
-use respan_gateway_media_http::gemini::{GeminiImages, GeminiTranscriptions, GeminiVeo};
+use respan_gateway_media_http::gemini::{
+    GeminiImages, GeminiSpeech, GeminiTranscriptions, GeminiVeo,
+};
 use respan_gateway_media_http::openai::{
     OpenAiEmbeddings, OpenAiImages, OpenAiSpeech, OpenAiTranscriptions, OpenAiVideos,
 };
@@ -287,6 +289,7 @@ pub fn formats() -> Vec<KnownFormat> {
             .job_ids("veo_")
             .model(Model::of(video::Input::model, video::Input::set_model)),
         KnownFormat::provider_only(kind::TRANSCRIPTION, &GeminiTranscriptions),
+        KnownFormat::provider_only(kind::SPEECH, &GeminiSpeech),
         KnownFormat::claiming(
             kind::DECISION,
             endpoints::DECISIONS,

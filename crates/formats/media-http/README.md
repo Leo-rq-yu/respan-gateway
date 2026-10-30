@@ -156,6 +156,20 @@ model as a transcriber, through `generateContent`, to providers only.
   is token usage. An answer with no text and a block or finish reason is
   400 `no_transcript`.
 
+`gemini::GeminiSpeech`, named `gemini-speech`: Gemini's speech models
+(`gemini-3.8-flash-tts`) through `generateContent`, to providers only.
+
+- A call is `POST /models/{model}:generateContent`, one user turn of the
+  text, `{instructions}: {text}` if it has instructions, asking for audio
+  (`responseModalities: ["AUDIO"]`) in the voice named, a
+  `speechConfig`'s `prebuiltVoiceConfig.voiceName`, such as `Kore`. Its
+  native fields go in the body.
+- It speaks a WAV of 16-bit mono PCM at the rate it says (24 kHz), a
+  header put before samples it answers bare (`audio/L16`). Another
+  `response_format`, or none (OpenAI's `mp3`), and a `speed` are refused,
+  400 `unsupported`, before any call; an answer with no audio is 400
+  `no_audio`.
+
 `bedrock::BedrockEmbeddings`, named `bedrock-embeddings`: Amazon Bedrock's
 embedding models on InvokeModel, `POST /model/{model}/invoke`, as a provider
 only, its key a Bedrock API key as a bearer token.
