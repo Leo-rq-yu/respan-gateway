@@ -37,6 +37,8 @@ version, as OpenAI's SDKs take it: `https://api.openai.com/v1`,
   it.
 - An answer's image is of its `output_format`, else of the type its bytes
   say, else PNG.
+- An image stream stops when the provider completes the requested `n` images
+  (one by default). If the body ends before that count, the stream is truncated.
 - An image request's `quality`, `output_format` and `user`, and an answer's
   `created`, `revised_prompt` and streamed partial images, are
   `openai-images`' native fields: another format drops them.
