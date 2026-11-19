@@ -36,7 +36,7 @@ pub const FORMATS: &[&dyn Upstream] = &[
     &GeminiGenerate,
     &BedrockConverse,
     &OpenAiRealtime,
-    &OpenAiRealtimeBeta,
+    &OpenAiRealtimeBeta::DEFAULT,
     &OpenAiLive,
     &GeminiLive,
     &MistralRealtime,
