@@ -264,6 +264,22 @@ impl Models {
     }
 }
 
+/// What the names of decision models hold: TypeSafe's Jev, Cloudflare's
+/// Clef, Gemini Decision, Perplexity's Decider, Baseten's Elephant and
+/// Mammoth, DeepInfra's Drex, Upstage's Solar Decide. A chat model that
+/// also answers decisions, as OpenAI's does, is listed as a chat model.
+const DECISION_MODELS: &[&str] = &[
+    "jev",
+    "clef",
+    "systemone",
+    "decision",
+    "decider",
+    "elephant",
+    "mammoth",
+    "drex",
+    "solar-decide",
+];
+
 /// What a model does, by its name as vendors spell them; chat unless the
 /// name says otherwise.
 fn kind_of(id: &str) -> &'static str {
@@ -276,7 +292,7 @@ fn kind_of(id: &str) -> &'static str {
         _ if has(&["tts"]) => kind::SPEECH,
         _ if has(&["sora", "veo"]) => kind::VIDEO,
         _ if has(&["realtime", "-live", "live-", "native-audio"]) => kind::REALTIME,
-        _ if has(&["jev", "clef", "systemone"]) => kind::DECISION,
+        _ if has(DECISION_MODELS) => kind::DECISION,
         _ => kind::CHAT,
     }
 }
@@ -419,5 +435,7 @@ mod tests {
         assert_eq!(kind("text-embedding-3-small"), "embedding");
         assert_eq!(kind("gemini-embedding-001"), "embedding");
         assert_eq!(kind("jev-latest"), "decision");
+        assert_eq!(kind("gemini-decision-1"), "decision");
+        assert_eq!(kind("pplx-decider-latest"), "decision");
     }
 }

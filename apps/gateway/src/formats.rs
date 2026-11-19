@@ -12,6 +12,8 @@ use respan_gateway_conversation_http::responses::OpenAiResponses;
 use respan_gateway_core::{Fault, Format, Gateway};
 use respan_gateway_decision as decision;
 use respan_gateway_decision_http::SystemOne;
+use respan_gateway_decision_http::gemini::GeminiDecisions;
+use respan_gateway_decision_http::openai::OpenAiDecisions;
 use respan_gateway_http::{ClientIo, ProviderIo, raw::Original};
 use respan_gateway_media::{embedding, image, speech, transcription, video};
 use respan_gateway_media_http::bedrock::BedrockImages;
@@ -177,6 +179,8 @@ mod endpoints {
     pub const SPEECH: &[&str] = &["POST /v1/audio/speech"];
     pub const EMBEDDINGS: &[&str] = &["POST /v1/embeddings"];
     pub const SYSTEMONE: &[&str] = &["POST /v1/systemone"];
+    pub const DECISIONS: &[&str] = &["POST /v1/decisions"];
+    pub const GEMINI_DECISIONS: &[&str] = &["POST /v1beta/decisions"];
     pub const VIDEOS: &[&str] = &[
         "POST /v1/videos",
         "GET /v1/videos",
@@ -232,10 +236,11 @@ pub fn formats() -> Vec<KnownFormat> {
         KnownFormat::of(kind::VIDEO, endpoints::VEO, GeminiVeo)
             .job_ids("veo_")
             .model(Model::of(video::Input::model, video::Input::set_model)),
-        KnownFormat::of(kind::DECISION, endpoints::SYSTEMONE, SystemOne).model(Model::of(
-            decision::Input::model,
-            decision::Input::set_model,
-        )),
+        KnownFormat::of(kind::DECISION, endpoints::SYSTEMONE, SystemOne).model(decision()),
+        KnownFormat::of(kind::DECISION, endpoints::DECISIONS, OpenAiDecisions::new())
+            .model(decision()),
+        KnownFormat::of(kind::DECISION, endpoints::GEMINI_DECISIONS, GeminiDecisions)
+            .model(decision()),
         KnownFormat::of(kind::PASSTHROUGH, endpoints::PASSTHROUGH, Passthrough),
     ]
 }
@@ -243,6 +248,11 @@ pub fn formats() -> Vec<KnownFormat> {
 /// How the model of a chat request is named.
 fn chat() -> Model {
     Model::of(conversation::Input::model, conversation::Input::set_model)
+}
+
+/// How the model of a decision request is named.
+fn decision() -> Model {
+    Model::of(decision::Input::model, decision::Input::set_model)
 }
 
 /// How a realtime session names its model: at `?model=` on its handshake,

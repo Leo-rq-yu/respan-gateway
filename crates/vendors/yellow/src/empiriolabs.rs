@@ -1,6 +1,8 @@
-//! EmpirioLabs: images in its dialect of OpenAI's.
+//! EmpirioLabs: images in its dialect of OpenAI's, and decisions as System
+//! One, at `/decisions`.
 
 use respan_gateway_core::Fault;
+use respan_gateway_decision_http::{At, DialectedSystemOne};
 use respan_gateway_media::image::Input;
 use respan_gateway_media_http::openai::{
     DialectedImages, Edits, ImagesDialect, aspect_ratio, resolution,
@@ -16,7 +18,10 @@ const BASE_URL: &str = "https://api.empiriolabs.ai/v1";
 pub const VENDOR: Vendor = Vendor {
     id: "empiriolabs",
     key_env: &["EMPIRIOLABS_API_KEY"],
-    formats: &[(&DialectedImages::new(EmpirioImages), Some(BASE_URL))],
+    formats: &[
+        (&DialectedImages::new(EmpirioImages), Some(BASE_URL)),
+        (&DialectedSystemOne::new(At("/decisions")), Some(BASE_URL)),
+    ],
     ..Vendor::DEFAULT
 };
 

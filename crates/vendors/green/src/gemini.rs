@@ -1,6 +1,7 @@
 //! Google's Gemini API: Chat Completions, images and embeddings at its
 //! OpenAI-compatible base, and its own API beside it: `generateContent`,
-//! Gemini Live and Veo.
+//! Gemini Live, Veo and Decisions, which is not yet verified against its
+//! live API.
 
 use std::borrow::Cow;
 
@@ -12,6 +13,7 @@ use serde_json::{Map, Value, json};
 
 use respan_gateway_conversation_http::gemini::{GeminiGenerate, needs_signatures};
 use respan_gateway_conversation_http::openai::OpenAiChat;
+use respan_gateway_decision_http::gemini::GeminiDecisions;
 use respan_gateway_media_http::gemini::GeminiVeo;
 use respan_gateway_media_http::openai::{OpenAiEmbeddings, OpenAiImages};
 use respan_gateway_realtime_ws::GeminiLive;
@@ -21,7 +23,7 @@ use respan_gateway_vendor_kit::{
     json as body_json, models,
 };
 
-/// Its own API: `generateContent` and Veo.
+/// Its own API: `generateContent`, Veo and Decisions.
 const API: &str = "https://generativelanguage.googleapis.com/v1beta";
 
 /// Where Live is: its origin, as Live's path is whole.
@@ -45,6 +47,7 @@ pub const VENDOR: Vendor = Vendor {
         (&OpenAiImages, Some(OPENAI_API)),
         (&GeminiVeo, Some(API)),
         (&OpenAiEmbeddings, Some(OPENAI_API)),
+        (&GeminiDecisions, Some(API)),
     ],
     models: list_models,
     ..Vendor::DEFAULT

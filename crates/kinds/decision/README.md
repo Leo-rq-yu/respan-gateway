@@ -2,7 +2,8 @@
 
 `respan-gateway-decision` is the decision kind: typed questions about a
 state, each answered with probabilities rather than prose, as TypeSafe's
-System One and decision models like it answer them. Its formats over HTTP
+System One, OpenAI's and Gemini's Decisions and decision models like them
+answer them. Its formats over HTTP
 are [`respan-gateway-decision-http`](../../formats/decision-http/README.md)'s.
 
 | Type | What it holds |

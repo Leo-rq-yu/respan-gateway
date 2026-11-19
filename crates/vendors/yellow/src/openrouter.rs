@@ -1,9 +1,11 @@
-//! OpenRouter: Chat Completions and images, for many vendors' models.
+//! OpenRouter: Chat Completions, images and decisions, for many vendors'
+//! models.
 
 use respan_gateway_conversation::Output;
 use respan_gateway_conversation_http::dialect::{Call, Dialect, Dialected};
 use respan_gateway_conversation_http::openai::OpenAiChat;
 use respan_gateway_core::{Fault, Filter};
+use respan_gateway_decision_http::SystemOne;
 use respan_gateway_media::image::Input;
 use respan_gateway_media_http::openai::{
     DialectedImages, Edits, ImagesDialect, aspect_ratio, resolution,
@@ -15,6 +17,9 @@ use respan_gateway_vendor_kit::{Vendor, chat};
 /// Where its API is.
 const BASE_URL: &str = "https://openrouter.ai/api/v1";
 
+/// Where its System One is, in alpha: `/api/alpha/systemone`.
+const ALPHA: &str = "https://openrouter.ai/api/alpha";
+
 /// OpenRouter. Its models' names are `<vendor>/<model>`: a configured
 /// provider named `<vendor>` takes the name first.
 pub const VENDOR: Vendor = Vendor {
@@ -23,6 +28,7 @@ pub const VENDOR: Vendor = Vendor {
     formats: &[
         (&Dialected::new(OpenAiChat, OpenRouter), Some(BASE_URL)),
         (&DialectedImages::new(OpenRouterImages), Some(BASE_URL)),
+        (&SystemOne, Some(ALPHA)),
     ],
     ..Vendor::DEFAULT
 };

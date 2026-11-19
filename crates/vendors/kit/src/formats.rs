@@ -7,6 +7,8 @@ use respan_gateway_conversation_http::gemini::GeminiGenerate;
 use respan_gateway_conversation_http::openai::OpenAiChat;
 use respan_gateway_conversation_http::responses::OpenAiResponses;
 use respan_gateway_decision_http::SystemOne;
+use respan_gateway_decision_http::gemini::GeminiDecisions;
+use respan_gateway_decision_http::openai::OpenAiDecisions;
 use respan_gateway_media_http::bedrock::BedrockImages;
 use respan_gateway_media_http::dashscope::DashScopeImages;
 use respan_gateway_media_http::gemini::GeminiVeo;
@@ -37,6 +39,8 @@ pub const FORMATS: &[&dyn Upstream] = &[
     &DashScopeImages,
     &BedrockImages,
     &SystemOne,
+    &OpenAiDecisions::new(),
+    &GeminiDecisions,
     &Passthrough,
 ];
 

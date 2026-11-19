@@ -3,8 +3,10 @@
 //! to end against their live APIs. A vendor moves to green once it is.
 
 pub mod azure;
+pub mod baseten;
 pub mod bedrock;
 pub mod cloudflare;
+pub mod concentrate;
 pub mod deepinfra;
 pub mod deepseek;
 pub mod empiriolabs;
@@ -13,9 +15,12 @@ pub mod groq;
 pub mod meta;
 pub mod minimax;
 pub mod mistral;
+pub mod morph;
 pub mod novita;
 pub mod ollama;
 pub mod openrouter;
+pub mod perplexity;
+pub mod primeintellect;
 pub mod qwen;
 pub mod together;
 pub mod vllm;
@@ -45,4 +50,9 @@ pub const ALL: &[&Vendor] = &[
     &novita::VENDOR,
     &zai::VENDOR,
     &meta::VENDOR,
+    &perplexity::VENDOR,
+    &morph::VENDOR,
+    &baseten::VENDOR,
+    &concentrate::VENDOR,
+    &primeintellect::VENDOR,
 ];

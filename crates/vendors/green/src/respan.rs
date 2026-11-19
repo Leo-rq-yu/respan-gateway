@@ -1,6 +1,7 @@
 //! Respan: its gateway, one key for many vendors' models, in each spec it
 //! serves: Chat Completions, Responses, Anthropic Messages and Gemini's
-//! `generateContent`.
+//! `generateContent`; and decisions as System One, at `/decisions`, which
+//! is not yet verified against its live API.
 
 use respan_gateway_conversation::Output;
 use respan_gateway_conversation_http::Schema;
@@ -10,6 +11,7 @@ use respan_gateway_conversation_http::gemini::GeminiGenerate;
 use respan_gateway_conversation_http::openai::OpenAiChat;
 use respan_gateway_conversation_http::responses::OpenAiResponses;
 use respan_gateway_core::Filter;
+use respan_gateway_decision_http::{At, DialectedSystemOne};
 use serde_json::Value;
 
 use respan_gateway_vendor_kit::{
@@ -39,6 +41,7 @@ pub const VENDOR: Vendor = Vendor {
         (&OpenAiResponses, Some(BASE_URL)),
         (&AnthropicMessages, Some(ANTHROPIC)),
         (&GeminiGenerate, Some(GEMINI)),
+        (&DialectedSystemOne::new(At("/decisions")), Some(BASE_URL)),
     ],
     models: list_models,
     format_for: Some(format_for),

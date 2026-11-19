@@ -264,6 +264,11 @@ fn a_vendor_is_every_format_it_speaks() {
                 "openai:openai-embeddings",
                 "https://api.openai.com/v1"
             ),
+            entry(
+                "openai-decisions",
+                "openai:openai-decisions",
+                "https://api.openai.com/v1"
+            ),
         ]
     );
     assert_eq!(
@@ -303,8 +308,8 @@ fn a_vendor_is_every_format_it_speaks() {
     );
     assert_eq!(header(1, 4, "x-goog-api-key").as_deref(), Some("AIza"));
     assert!(plan.upstreams.iter().all(|u| u.own_key));
-    // Served by default: the chat formats, each chat, media and realtime client
-    // format, and Responses over WebSocket.
+    // Served by default: the chat formats, each chat, media, decision and
+    // realtime client format, and Responses over WebSocket.
     assert_eq!(
         plan.serve,
         [
@@ -320,6 +325,9 @@ fn a_vendor_is_every_format_it_speaks() {
             "gemini-generate",
             "gemini-live",
             "gemini-veo",
+            "typesafe-systemone",
+            "openai-decisions",
+            "gemini-decisions",
             "responses-ws"
         ]
     );
@@ -373,7 +381,7 @@ fn a_bad_provider_is_an_error() {
         ("p = {  }", "provider 'p': needs a `vendor` or `formats`"),
         (
             "p = { vendor = \"nope\" }",
-            "provider 'p': unknown vendor 'nope'; vendors: [openai, anthropic, gemini, groq, deepseek, openrouter, xai, mistral, together, fireworks, ollama, azure, vllm, typesafe, cloudflare, respan, qwen, deepinfra, empiriolabs, bedrock, minimax, novita, zai, meta]",
+            "provider 'p': unknown vendor 'nope'; vendors: [openai, anthropic, gemini, groq, deepseek, openrouter, xai, mistral, together, fireworks, ollama, azure, vllm, typesafe, cloudflare, respan, qwen, deepinfra, empiriolabs, bedrock, minimax, novita, zai, meta, perplexity, morph, baseten, concentrate, primeintellect]",
         ),
         (
             "p = { formats = \"openai-chat\" }",
@@ -612,7 +620,7 @@ fn an_unknown_format_names_the_compiled_in_ones() {
     assert_eq!(
         resolve(text).err().as_deref(),
         Some(
-            "formats: unknown format 'nope'; compiled-in formats: [openai-chat, openai-responses, openai-realtime, responses-ws, openai-images, openai-transcriptions, openai-speech, openai-videos, openai-embeddings, anthropic-messages, gemini-generate, gemini-live, dashscope-images, bedrock-images, gemini-veo, typesafe-systemone, passthrough]"
+            "formats: unknown format 'nope'; compiled-in formats: [openai-chat, openai-responses, openai-realtime, responses-ws, openai-images, openai-transcriptions, openai-speech, openai-videos, openai-embeddings, anthropic-messages, gemini-generate, gemini-live, dashscope-images, bedrock-images, gemini-veo, typesafe-systemone, openai-decisions, gemini-decisions, passthrough]"
         )
     );
 }
@@ -907,4 +915,211 @@ async fn qwen_draws_images_at_dashscope_at_once_or_as_a_polled_task() {
             "GET tasks/t-1",
         ]
     );
+}
+
+/// What a fake decision vendor took: a call's path, its key as `header:
+/// value`, and its body.
+type Decided = std::sync::Arc<std::sync::Mutex<Vec<(String, String, serde_json::Value)>>>;
+
+/// A fake of the decision contracts at a local address: System One under
+/// `/one` (at `/systemone` and `/decisions`, and in Prime Intellect's names
+/// at `/evaluations`), OpenAI's Decisions under `/oai`, Gemini's under
+/// `/gem`; and each call it took.
+async fn fake_decisions() -> (String, Decided) {
+    use serde_json::{Value, json};
+    let seen = Decided::default();
+    let log = seen.clone();
+    let answer = move |uri: http::Uri, headers: http::HeaderMap, body: String| {
+        let mut key = ["authorization", "api-key", "x-goog-api-key"].into_iter();
+        let key = key.find_map(|name| {
+            let value = headers.get(name)?.to_str().ok()?;
+            Some(format!("{name}: {value}"))
+        });
+        let body: Value = serde_json::from_str(&body).unwrap_or_default();
+        let path = uri.path().to_owned();
+        let answers = json!({
+            "spam": {"type": "noul", "noul": 0.98},
+            "dept": {"type": "choice", "choice": "billing", "confidence": 0.8,
+                "probabilities": {"billing": 0.9, "other": 0.1}},
+        });
+        let said = match path.as_str() {
+            "/one/systemone" | "/one/decisions" => json!({"model": "m", "answers": answers,
+                "usage": {"input_tokens": 42, "output_tokens": 0}}),
+            "/one/evaluations" => json!({
+                "answers": {"spam": {"type": "boolean", "probability": 0.6}},
+                "usage": {"inputTokens": 5, "outputTokens": 0}}),
+            "/oai/decisions" => json!({"id": "dec_1", "model": "gpt-6-luna",
+                "answers": [{"type": "predicate", "name": "spam", "probability": 0.7}],
+                "usage": {"input_tokens": 10, "output_tokens": 0, "total_tokens": 10}}),
+            "/gem/decisions" => json!({"model": "gemini-decision-1", "answers": answers,
+                "usage": {"total_input_tokens": 7, "total_output_tokens": 0, "total_tokens": 7}}),
+            _ => Value::Null,
+        };
+        let mut log = log.lock().unwrap_or_else(|e| e.into_inner());
+        log.push((path, key.unwrap_or_default(), body));
+        async move {
+            match said {
+                Value::Null => Err(StatusCode::NOT_FOUND),
+                said => Ok(axum::Json(said)),
+            }
+        }
+    };
+    let app = axum::Router::new().fallback(answer);
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("a port");
+    let at = listener.local_addr().expect("an address");
+    tokio::spawn(async move { axum::serve(listener, app).await });
+    (format!("http://{at}"), seen)
+}
+
+#[tokio::test]
+async fn a_decision_goes_to_each_vendor_in_its_contract_and_comes_back_in_the_clients() {
+    use serde_json::{Value, json};
+    let (base, seen) = fake_decisions().await;
+    let text = format!(
+        "[providers]\n\
+         baseten = {{ vendor = \"baseten\", key = \"b\", base_url = \"{base}/one\" }}\n\
+         deepinfra = {{ vendor = \"deepinfra\", key = \"d\", formats = {{ typesafe-systemone = \"{base}/one\" }} }}\n\
+         prime = {{ vendor = \"primeintellect\", key = \"p\", base_url = \"{base}/one\" }}\n\
+         concentrate = {{ vendor = \"concentrate\", key = \"c\", base_url = \"{base}/oai\" }}\n\
+         azure = {{ vendor = \"azure\", key = \"a\", formats = {{ openai-decisions = \"{base}/oai\" }} }}\n\
+         gemini = {{ vendor = \"gemini\", key = \"g\", formats = {{ gemini-decisions = \"{base}/gem\" }} }}\n"
+    );
+    let gateway = resolve(&text).unwrap_or_else(|e| panic!("gateway: {e}"));
+    let ask = |path: &'static str, body: Value| {
+        let (gateway, seen) = (gateway.clone(), seen.clone());
+        async move {
+            let (resp, _) = serve(&gateway, post(path, body.to_string())).await;
+            let (status, _, body) = read_whole(resp).await;
+            let v: Value = serde_json::from_slice(&body.unwrap_or_default()).unwrap_or_default();
+            assert_eq!(status, StatusCode::OK, "{path}: {v}");
+            let took = seen.lock().unwrap_or_else(|e| e.into_inner()).pop();
+            (v, took.expect("a call"))
+        }
+    };
+
+    // OpenAI's Decisions to a vendor of System One, and back.
+    let (v, (path, key, call)) = ask(
+        "/v1/decisions",
+        json!({"model": "baseten/decision-models/baseten-elephant-9b-latest", "input": "Charged twice",
+            "questions": [
+                {"type": "predicate", "name": "spam", "instructions": "Is this spam?"},
+                {"type": "choice", "name": "dept", "choices": [
+                    {"value": "billing", "description": "Money"}, {"value": "other"}]}]}),
+    )
+    .await;
+    assert_eq!(
+        (path.as_str(), key.as_str()),
+        ("/one/systemone", "authorization: Bearer b")
+    );
+    assert_eq!(
+        call,
+        json!({"model": "decision-models/baseten-elephant-9b-latest", "state": "Charged twice",
+            "questions": {
+                "spam": {"type": "noul", "instructions": "Is this spam?"},
+                "dept": {"type": "choice", "criteria": {"billing": "Money", "other": null}}}})
+    );
+    let named = |name: &str| {
+        let answers = v["answers"].as_array().into_iter().flatten();
+        let mut answers = answers;
+        answers
+            .find(|a| a["name"] == name)
+            .cloned()
+            .unwrap_or_default()
+    };
+    assert_eq!(
+        named("spam"),
+        json!({"type": "predicate", "name": "spam", "probability": 0.98})
+    );
+    assert_eq!(named("dept")["choice"], "billing");
+    assert_eq!(
+        named("dept")["probabilities"][0],
+        json!({"value": "billing", "probability": 0.9})
+    );
+    assert_eq!(v["usage"]["input_tokens"], 42);
+
+    // System One to a vendor of OpenAI's Decisions, its key where Azure
+    // takes it.
+    let (v, (path, key, call)) = ask(
+        "/v1/systemone",
+        json!({"model": "azure/gpt-6-luna", "state": {"subject": "Refund"},
+            "questions": {"spam": {"type": "noul", "criteria": {"true": "Unsolicited"}}}}),
+    )
+    .await;
+    assert_eq!(
+        (path.as_str(), key.as_str()),
+        ("/oai/decisions", "api-key: a")
+    );
+    assert_eq!(
+        call,
+        json!({"model": "gpt-6-luna", "input": "{\"subject\":\"Refund\"}",
+            "questions": [{"type": "predicate", "name": "spam", "instructions": "True: Unsolicited"}]})
+    );
+    assert_eq!(
+        v,
+        json!({"model": "gpt-6-luna", "answers": {"spam": {"type": "noul", "noul": 0.7}},
+            "usage": {"input_tokens": 10, "output_tokens": 0}})
+    );
+
+    // A vendor of both contracts takes the client's own.
+    let (_, (path, ..)) = ask(
+        "/v1/decisions",
+        json!({"model": "concentrate/jev-latest", "input": "s",
+            "questions": [{"type": "predicate", "name": "spam"}]}),
+    )
+    .await;
+    assert_eq!(path, "/oai/decisions");
+
+    // Gemini's Decisions to System One at `/decisions`, and from System
+    // One to Gemini's, its key in Google's header.
+    let (v, (path, _, call)) = ask(
+        "/v1beta/decisions",
+        json!({"model": "deepinfra/cloudflare/clef", "input": "s",
+            "questions": {"spam": {"type": "noul"}}}),
+    )
+    .await;
+    assert_eq!(path, "/one/decisions");
+    assert_eq!(call["state"], "s");
+    assert_eq!(
+        v["usage"],
+        json!({"total_input_tokens": 42, "total_output_tokens": 0, "total_tokens": 42})
+    );
+    let (v, (path, key, call)) = ask(
+        "/v1/systemone",
+        json!({"model": "gemini/gemini-decision-1", "state": "s",
+            "questions": {"spam": {"type": "noul"}}}),
+    )
+    .await;
+    assert_eq!(
+        (path.as_str(), key.as_str()),
+        ("/gem/decisions", "x-goog-api-key: g")
+    );
+    assert_eq!(call["input"], "s");
+    assert_eq!(v["usage"], json!({"input_tokens": 7, "output_tokens": 0}));
+
+    // Prime Intellect's names, there and back.
+    let (v, (path, _, call)) = ask(
+        "/v1/systemone",
+        json!({"model": "prime/cloudflare/clef", "state": "s",
+            "questions": {"spam": {"type": "noul"}}}),
+    )
+    .await;
+    assert_eq!(path, "/one/evaluations");
+    assert_eq!(call["questions"]["spam"]["type"], "boolean");
+    assert_eq!(
+        v,
+        json!({"answers": {"spam": {"type": "noul", "noul": 0.6}},
+            "usage": {"input_tokens": 5, "output_tokens": 0}})
+    );
+
+    // More questions than DeepInfra takes are refused before any call.
+    let many: serde_json::Map<String, Value> = (0..65)
+        .map(|i| (i.to_string(), json!({"type": "noul"})))
+        .collect();
+    let body = json!({"model": "deepinfra/cloudflare/clef", "state": "s", "questions": many});
+    let before = seen.lock().unwrap_or_else(|e| e.into_inner()).len();
+    let (resp, _) = serve(&gateway, post("/v1/systemone", body.to_string())).await;
+    assert_eq!(read_whole(resp).await.0, StatusCode::BAD_REQUEST);
+    assert_eq!(seen.lock().unwrap_or_else(|e| e.into_inner()).len(), before);
 }

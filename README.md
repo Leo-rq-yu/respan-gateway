@@ -122,14 +122,17 @@ on a public address.
 | image | `openai-images`; to providers also `dashscope-images` (Qwen) and `bedrock-images` (Stability on Bedrock) |
 | speech, transcription, embedding | OpenAI's endpoints |
 | video | `openai-videos`, `gemini-veo` |
+| decision | `typesafe-systemone` ⇄ `openai-decisions` ⇄ `gemini-decisions` |
 
 **Vendors:** OpenAI, Anthropic, Gemini, Respan, TypeSafe, Groq, DeepSeek,
 OpenRouter, xAI, Mistral, Together, Fireworks, Ollama, Azure, vLLM,
-Cloudflare, Qwen, DeepInfra, EmpirioLabs, Bedrock, MiniMax, Novita, Z.ai and
-Meta, plus any compatible endpoint; see [Vendors](docs/vendors.md)
+Cloudflare, Qwen, DeepInfra, EmpirioLabs, Bedrock, MiniMax, Novita, Z.ai,
+Meta, Perplexity, Morph, Baseten, Concentrate and Prime Intellect, plus any
+compatible endpoint; see [Vendors](docs/vendors.md)
 for their tiers, keys and formats. Translation details are in each
 format's README, for [chat](crates/formats/conversation-http/README.md),
-[media](crates/formats/media-http/README.md) and
+[media](crates/formats/media-http/README.md),
+[decisions](crates/formats/decision-http/README.md) and
 [realtime](crates/formats/realtime-ws/README.md).
 
 ## Plugins

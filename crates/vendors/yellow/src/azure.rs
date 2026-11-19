@@ -1,18 +1,23 @@
-//! Azure OpenAI: Chat Completions, at a resource's own URL
+//! Azure OpenAI: Chat Completions and Decisions, at a resource's own URL
 //! (`https://<resource>.openai.azure.com/openai/v1`).
 
 use respan_gateway_conversation::Output;
 use respan_gateway_conversation_http::dialect::{Call, Dialect, Dialected};
 use respan_gateway_conversation_http::openai::OpenAiChat;
 use respan_gateway_core::Filter;
+use respan_gateway_decision_http::openai::OpenAiDecisions;
 
 use respan_gateway_vendor_kit::{KeyIn, Vendor, chat};
 
-/// Azure OpenAI. It has no base URL of its own: a resource has one.
+/// Azure OpenAI. It has no base URL of its own: a resource has one. Its
+/// Decisions take the key in `api-key`, as its Chat Completions does.
 pub const VENDOR: Vendor = Vendor {
     id: "azure",
     key_env: &["AZURE_OPENAI_API_KEY"],
-    formats: &[(&Dialected::new(OpenAiChat, Azure), None)],
+    formats: &[
+        (&Dialected::new(OpenAiChat, Azure), None),
+        (&OpenAiDecisions::key_in("api-key"), None),
+    ],
     ..Vendor::DEFAULT
 };
 
