@@ -373,7 +373,7 @@ fn a_bad_provider_is_an_error() {
         ("p = {  }", "provider 'p': needs a `vendor` or `formats`"),
         (
             "p = { vendor = \"nope\" }",
-            "provider 'p': unknown vendor 'nope'; vendors: [openai, anthropic, gemini, groq, deepseek, openrouter, xai, mistral, together, fireworks, ollama, azure, vllm, typesafe, cloudflare, respan]",
+            "provider 'p': unknown vendor 'nope'; vendors: [openai, anthropic, gemini, groq, deepseek, openrouter, xai, mistral, together, fireworks, ollama, azure, vllm, typesafe, cloudflare, respan, qwen, deepinfra, empiriolabs, bedrock, minimax, novita, zai, meta]",
         ),
         (
             "p = { formats = \"openai-chat\" }",
@@ -612,7 +612,7 @@ fn an_unknown_format_names_the_compiled_in_ones() {
     assert_eq!(
         resolve(text).err().as_deref(),
         Some(
-            "formats: unknown format 'nope'; compiled-in formats: [openai-chat, openai-responses, openai-realtime, responses-ws, openai-images, openai-transcriptions, openai-speech, openai-videos, openai-embeddings, anthropic-messages, gemini-generate, gemini-live, gemini-veo, typesafe-systemone, passthrough]"
+            "formats: unknown format 'nope'; compiled-in formats: [openai-chat, openai-responses, openai-realtime, responses-ws, openai-images, openai-transcriptions, openai-speech, openai-videos, openai-embeddings, anthropic-messages, gemini-generate, gemini-live, dashscope-images, bedrock-images, gemini-veo, typesafe-systemone, passthrough]"
         )
     );
 }
@@ -818,4 +818,93 @@ async fn a_vendor_sends_a_chat_to_a_model_its_chat_format_refuses_in_another() {
             "{model}"
         );
     }
+}
+
+/// A fake of DashScope's image endpoints at a local address: a generation
+/// answered at once, a task created pending and then polled done; each
+/// call it took, as `METHOD path` with its async header and body.
+async fn fake_dashscope() -> (String, std::sync::Arc<std::sync::Mutex<Vec<String>>>) {
+    use axum::routing::{get, post};
+    use serde_json::{Value, json};
+    let seen = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let log = |seen: &std::sync::Arc<std::sync::Mutex<Vec<String>>>, line: String| {
+        seen.lock().unwrap_or_else(|e| e.into_inner()).push(line);
+    };
+    let (a, b, c) = (seen.clone(), seen.clone(), seen.clone());
+    let app = axum::Router::new()
+        .route(
+            "/api/v1/services/aigc/multimodal-generation/generation",
+            post(move |body: String| async move {
+                log(&a, format!("POST generation {body}"));
+                axum::Json(
+                    json!({"output": {"choices": [{"message": {"role": "assistant",
+                    "content": [{"image": "https://oss.test/g.png"}]}}]},
+                    "usage": {"image_count": 1}}),
+                )
+            }),
+        )
+        .route(
+            "/api/v1/services/aigc/text2image/image-synthesis",
+            post(move |headers: http::HeaderMap, body: String| async move {
+                let task = headers.get("x-dashscope-async").is_some();
+                log(&b, format!("POST synthesis async={task} {body}"));
+                axum::Json(json!({"output": {"task_id": "t-1", "task_status": "PENDING"}}))
+            }),
+        )
+        .route(
+            "/api/v1/tasks/{id}",
+            get(
+                move |axum::extract::Path(id): axum::extract::Path<String>| async move {
+                    log(&c, format!("GET tasks/{id}"));
+                    axum::Json::<Value>(
+                        json!({"output": {"task_id": id, "task_status": "SUCCEEDED",
+                    "results": [{"url": "https://oss.test/t.png"}]}, "usage": {"image_count": 1}}),
+                    )
+                },
+            ),
+        );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("a port");
+    let at = listener.local_addr().expect("an address");
+    tokio::spawn(async move { axum::serve(listener, app).await });
+    (format!("http://{at}/api/v1"), seen)
+}
+
+#[tokio::test]
+async fn qwen_draws_images_at_dashscope_at_once_or_as_a_polled_task() {
+    let (base, seen) = fake_dashscope().await;
+    let text = format!(
+        "providers = {{ qwen = {{ vendor = \"qwen\", key = \"sk-q\", formats = {{ dashscope-images = \"{base}\" }} }} }}\n"
+    );
+    let gateway = resolve(&text).unwrap_or_else(|e| panic!("gateway: {e}"));
+    let draw = |body: &'static str| {
+        let gateway = gateway.clone();
+        async move {
+            let (resp, _) = serve(&gateway, post("/v1/images/generations", body)).await;
+            let (status, _, body) = read_whole(resp).await;
+            let v: serde_json::Value =
+                serde_json::from_slice(&body.unwrap_or_default()).unwrap_or_default();
+            (status, v)
+        }
+    };
+    let (status, v) =
+        draw(r#"{"model":"qwen-image-plus","prompt":"a cat","size":"1328x1328"}"#).await;
+    assert_eq!(status, StatusCode::OK, "{v}");
+    assert_eq!(v["data"][0]["url"], "https://oss.test/g.png");
+    let (status, v) = draw(r#"{"model":"wan2.2-t2i-flash","prompt":"a cat"}"#).await;
+    assert_eq!(status, StatusCode::OK, "{v}");
+    assert_eq!(v["data"][0]["url"], "https://oss.test/t.png");
+    let (status, v) =
+        draw(r#"{"model":"qwen-image-plus","prompt":"a cat","response_format":"b64_json"}"#).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{v}");
+    let seen = seen.lock().unwrap_or_else(|e| e.into_inner()).clone();
+    assert_eq!(
+        seen,
+        [
+            r#"POST generation {"model":"qwen-image-plus","input":{"messages":[{"role":"user","content":[{"text":"a cat"}]}]},"parameters":{"size":"1328*1328"}}"#,
+            r#"POST synthesis async=true {"model":"wan2.2-t2i-flash","input":{"prompt":"a cat"},"parameters":{}}"#,
+            "GET tasks/t-1",
+        ]
+    );
 }

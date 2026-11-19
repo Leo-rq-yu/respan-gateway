@@ -36,7 +36,7 @@ Each vendor is in one of two tiers:
 |:-:|---|---|---|---|
 | <picture><source media="(prefers-color-scheme: dark)" srcset="assets/vendors/groq-dark.svg"><img src="assets/vendors/groq.svg" width="20" height="20" alt=""></picture> | Groq | `groq` | `GROQ_API_KEY` | `openai-chat`, `openai-transcriptions`, `openai-speech` |
 | <img src="assets/vendors/deepseek.svg" width="20" height="20" alt=""> | DeepSeek | `deepseek` | `DEEPSEEK_API_KEY` | `openai-chat` |
-| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/vendors/openrouter-dark.svg"><img src="assets/vendors/openrouter.svg" width="20" height="20" alt=""></picture> | OpenRouter | `openrouter` | `OPENROUTER_API_KEY` | `openai-chat` |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/vendors/openrouter-dark.svg"><img src="assets/vendors/openrouter.svg" width="20" height="20" alt=""></picture> | OpenRouter | `openrouter` | `OPENROUTER_API_KEY` | `openai-chat`, `openai-images` |
 | <picture><source media="(prefers-color-scheme: dark)" srcset="assets/vendors/xai-dark.svg"><img src="assets/vendors/xai.svg" width="20" height="20" alt=""></picture> | xAI | `xai` | `XAI_API_KEY` | `openai-chat`, `openai-images` |
 | <img src="assets/vendors/mistral.svg" width="20" height="20" alt=""> | Mistral | `mistral` | `MISTRAL_API_KEY` | `openai-chat`, `openai-embeddings` |
 | <img src="assets/vendors/together.svg" width="20" height="20" alt=""> | Together | `together` | `TOGETHER_API_KEY` | `openai-chat`, `openai-images`, `openai-embeddings` |
@@ -45,6 +45,14 @@ Each vendor is in one of two tiers:
 | <img src="assets/vendors/azure.svg" width="20" height="20" alt=""> | Azure OpenAI | `azure` | `AZURE_OPENAI_API_KEY` | `openai-chat` |
 | <img src="assets/vendors/vllm.svg" width="20" height="20" alt=""> | vLLM | `vllm` | none | `openai-chat` |
 | <img src="assets/vendors/cloudflare.svg" width="20" height="20" alt=""> | Cloudflare | `cloudflare` | `CLOUDFLARE_API_TOKEN` | `openai-chat`, `openai-embeddings` |
+| | Qwen | `qwen` | `DASHSCOPE_API_KEY` | `openai-chat`, `openai-embeddings`, `dashscope-images` |
+| | DeepInfra | `deepinfra` | `DEEPINFRA_API_KEY` | `openai-chat`, `openai-images`, `openai-embeddings` |
+| | EmpirioLabs | `empiriolabs` | `EMPIRIOLABS_API_KEY` | `openai-images` |
+| | Amazon Bedrock | `bedrock` | `AWS_BEARER_TOKEN_BEDROCK`; `AWS_REGION` says where | `bedrock-images` |
+| | MiniMax | `minimax` | `MINIMAX_API_KEY` | `openai-chat`, `openai-images` |
+| | Novita AI | `novita` | `NOVITA_API_KEY` | `openai-chat`, `openai-images` |
+| | Z.ai | `zai` | `ZAI_API_KEY` | `openai-chat`, `openai-images` |
+| | Meta (Llama API) | `meta` | `LLAMA_API_KEY` | `openai-chat`, `openai-images` |
 
 These tables are kept by hand: a vendor added to `ALL` in
 [`crates/vendors`](../crates/vendors/README.md), or a format added to a
@@ -78,7 +86,20 @@ sent no key; a provider at another base URL lists at
 Without a config file, `RESPAN_<VENDOR>_BASE_URL` moves a vendor's base URL
 (`OLLAMA_HOST` for `ollama`); with one, only the file's `base_url` counts
 (`respan-gateway init` writes the moved URL into it). `azure` and `vllm`
-need a `base_url`; `cloudflare` needs `CLOUDFLARE_ACCOUNT_ID`, or one.
+need a `base_url`; `cloudflare` needs `CLOUDFLARE_ACCOUNT_ID`, or one;
+`bedrock` needs `AWS_REGION`, or one.
+
+Image vendors' base URLs: Qwen's `dashscope-images` is DashScope's own API
+on the international site, `https://dashscope-intl.aliyuncs.com/api/v1`
+(its chat and embeddings at `/compatible-mode/v1`); `bedrock-images` is
+`https://bedrock-runtime.{AWS_REGION}.amazonaws.com`, its key a Bedrock API
+key; DeepInfra's `openai-images` is `https://api.deepinfra.com/v1/openai`,
+EmpirioLabs' `https://api.empiriolabs.ai/v1`, MiniMax's
+`https://api.minimax.io/v1`, Novita's `https://api.novita.ai/openai/v1`,
+Z.ai's `https://api.z.ai/api/paas/v4` and Meta's
+`https://api.llama.com/compat/v1`. How xAI, OpenRouter, EmpirioLabs, MiniMax
+and Z.ai depart from OpenAI Images is in their dialects
+([media formats](../crates/formats/media-http/README.md#vendors-dialects-of-openai-images)).
 
 How each vendor's quirks are handled, and how to add one, is in
 [`crates/vendors`](../crates/vendors/README.md).

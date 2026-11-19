@@ -14,6 +14,8 @@ use respan_gateway_decision as decision;
 use respan_gateway_decision_http::SystemOne;
 use respan_gateway_http::{ClientIo, ProviderIo, raw::Original};
 use respan_gateway_media::{embedding, image, speech, transcription, video};
+use respan_gateway_media_http::bedrock::BedrockImages;
+use respan_gateway_media_http::dashscope::DashScopeImages;
 use respan_gateway_media_http::gemini::GeminiVeo;
 use respan_gateway_media_http::openai::{
     OpenAiEmbeddings, OpenAiImages, OpenAiSpeech, OpenAiTranscriptions, OpenAiVideos,
@@ -96,7 +98,8 @@ impl KnownFormat {
         O: Clone + Send + Sync + 'static,
     {
         let client = format.clone();
-        let mut known = Self::provider_only(kind, &format);
+        let name = Format::<ProviderIo, O, I>::name(&format).to_owned();
+        let mut known = Self::provider_only(kind, name);
         known.endpoints = endpoints.iter().map(|e| (*e).to_owned()).collect();
         known.serve = Some(Box::new(move |gateway| {
             gateway.client::<I, O, _>(client.clone())
@@ -104,13 +107,10 @@ impl KnownFormat {
         known
     }
 
-    /// `format` of `kind`, which only providers speak.
-    pub fn provider_only<F, I, O>(kind: &'static str, format: &F) -> Self
-    where
-        F: Format<ProviderIo, O, I>,
-    {
+    /// The format `name` of `kind`, which only providers speak.
+    pub fn provider_only(kind: &'static str, name: impl Into<String>) -> Self {
         Self {
-            name: format.name().to_owned(),
+            name: name.into(),
             kind,
             endpoints: Vec::new(),
             websocket: false,
@@ -225,6 +225,10 @@ pub fn formats() -> Vec<KnownFormat> {
         KnownFormat::of(kind::CHAT, endpoints::MESSAGES, AnthropicMessages).model(chat()),
         KnownFormat::of(kind::CHAT, endpoints::GENERATE_CONTENT, GeminiGenerate).model(chat()),
         session(kind::REALTIME, GeminiLive, GeminiLive::PATH, true).model(realtime()),
+        KnownFormat::provider_only(kind::IMAGE, DashScopeImages::NAME)
+            .model(Model::of(image::Input::model, image::Input::set_model)),
+        KnownFormat::provider_only(kind::IMAGE, BedrockImages::NAME)
+            .model(Model::of(image::Input::model, image::Input::set_model)),
         KnownFormat::of(kind::VIDEO, endpoints::VEO, GeminiVeo)
             .job_ids("veo_")
             .model(Model::of(video::Input::model, video::Input::set_model)),

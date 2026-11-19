@@ -1,6 +1,6 @@
 [package]
 name = "respan-gateway-media-http"
-description = "The media kinds over HTTP: OpenAI Images, Audio Transcriptions, Speech, Videos and Embeddings, and Google's Veo."
+description = "The media kinds over HTTP: OpenAI Images, Audio Transcriptions, Speech, Videos and Embeddings, Google's Veo, DashScope's images and Stability on Bedrock."
 version = "0.1.0"
 edition.workspace = true
 rust-version.workspace = true
@@ -18,6 +18,7 @@ respan-gateway-sse.workspace = true
 respan-gateway-http-faults.workspace = true
 base64.workspace = true
 futures.workspace = true
+tokio = { workspace = true, features = ["time"] }
 multer = "3"
 respan-gateway-conversation.workspace = true
 respan-gateway-conversation-http.workspace = true

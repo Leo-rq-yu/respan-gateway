@@ -3,16 +3,24 @@
 //! to end against their live APIs. A vendor moves to green once it is.
 
 pub mod azure;
+pub mod bedrock;
 pub mod cloudflare;
+pub mod deepinfra;
 pub mod deepseek;
+pub mod empiriolabs;
 pub mod fireworks;
 pub mod groq;
+pub mod meta;
+pub mod minimax;
 pub mod mistral;
+pub mod novita;
 pub mod ollama;
 pub mod openrouter;
+pub mod qwen;
 pub mod together;
 pub mod vllm;
 pub mod xai;
+pub mod zai;
 
 use respan_gateway_vendor_kit::Vendor;
 
@@ -29,4 +37,12 @@ pub const ALL: &[&Vendor] = &[
     &azure::VENDOR,
     &vllm::VENDOR,
     &cloudflare::VENDOR,
+    &qwen::VENDOR,
+    &deepinfra::VENDOR,
+    &empiriolabs::VENDOR,
+    &bedrock::VENDOR,
+    &minimax::VENDOR,
+    &novita::VENDOR,
+    &zai::VENDOR,
+    &meta::VENDOR,
 ];

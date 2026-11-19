@@ -52,6 +52,61 @@ version, as OpenAI's SDKs take it: `https://api.openai.com/v1`,
 Vendors' fields the kind has no form for (Groq's `x_groq`, Together's
 `steps`) stay native, so a relay in the same format keeps them.
 
+## Vendors' dialects of OpenAI Images
+
+`openai::DialectedImages` is OpenAI Images as a vendor serves it, in its
+`ImagesDialect`: a provider format named `openai-images`, so a client of
+the spec is still relayed to it. A dialect says the path of a generation,
+how it takes an edit (`Edits::Spec`, or `Edits::Json` to a path, its
+images' URLs, a data URL for bytes, written where it takes them), and the
+call's fields as it takes them. `openai::aspect_ratio` and
+`openai::resolution` turn a size, `WxH`, into the aspect ratio and the
+named resolution a vendor takes; a size of a ratio it does not draw is
+refused, 400, rather than dropped. The vendors' dialects
+(`respan_gateway_vendors`):
+
+| Vendor | Generation | Size | Edit |
+| --- | --- | --- | --- |
+| xAI | `/images/generations`, `b64_json` unless asked | `aspect_ratio` and `resolution` (`1k`, `2k`) | JSON, `image: {url, type}` or `images`; no mask |
+| OpenRouter | `/images` | `aspect_ratio` and `resolution` (`512` to `4K`) | `/images`, `input_references`; no mask |
+| EmpirioLabs | `/images/generations`, `n` as `num_images` | `aspect_ratio` and `resolution` (`1K` to `4K`; Grok's `1k`, `2k`); GPT Image's as it is | JSON, `image: [urls]`; no mask |
+| MiniMax | the spec's | the spec's | JSON, `images: [{image_url}]`; no mask |
+| Z.ai | one image, by URL | the spec's | none |
+
+`dashscope::DashScopeImages`, named `dashscope-images`: Alibaba Cloud
+Model Studio's images (Qwen-Image, Wan, Qwen-MT-Image) as DashScope's own
+API serves them, at `https://dashscope-intl.aliyuncs.com/api/v1`. A
+provider format alone: a client of the image kind, in any format, is
+written to it.
+
+- A model is served by its name: Qwen-Image and Wan from 2.6 at once
+  (`/services/aigc/multimodal-generation/generation`, its source images
+  beside the prompt in one message); Wan before 2.6 as a task of
+  `/services/aigc/text2image/image-synthesis`, which takes no source
+  image; `qwen-mt-image*` as a task of
+  `/services/aigc/image2image/image-synthesis`, its one image a URL, its
+  `target_lang` (and `source_lang`, else `auto`) native fields.
+- A task is polled at `/tasks/{id}` every 2 s, for 10 minutes at most,
+  within the one call: its client gets a whole answer.
+- A size is written `W*H`; `negative_prompt`, `prompt_extend`, `watermark`
+  and `seed` are parameters. DashScope answers by URL alone, kept 24
+  hours: `b64_json`, a quality but `auto` or `standard`, or a file format
+  but `png` is refused, 400, before any call. It reports images, not
+  tokens: no usage is reported.
+
+`bedrock::BedrockImages`, named `bedrock-images`: Stability AI's image
+models (SD 3.5 Large, Stable Image Ultra and Core) as Amazon Bedrock's
+`InvokeModel` serves them, at `https://bedrock-runtime.{region}.amazonaws.com`,
+its key a Bedrock API key as a bearer token. A provider format alone.
+
+- A call is `POST /model/{model}/invoke`. A size is the nearest of
+  Stability's aspect ratios; an edit is `image-to-image` of one image's
+  bytes, in base64, and takes no size; `negative_prompt`, `seed` and
+  `strength` are its native fields. More than one image, a URL or a mask
+  is refused, 400.
+- Its `images` are base64; one a filter took (`finish_reasons` not null)
+  fails the call, 400. Bedrock reports no usage.
+
 `gemini::GeminiVeo`, named `gemini-veo`: Google's Veo as the Gemini API serves it, to clients and providers,
 at `https://generativelanguage.googleapis.com/v1beta` with the key in
 `x-goog-api-key`.

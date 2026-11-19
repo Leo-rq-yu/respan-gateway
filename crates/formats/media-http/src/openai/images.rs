@@ -84,14 +84,150 @@ impl Format<ProviderIo, Output, Input> for OpenAiImages {
     }
 
     fn bind(&self, io: ProviderIo) -> Result<Connection<Output, Input>, Fault> {
-        let stream = streams(&io, &[GENERATIONS, EDITS], |f| is_true(f.get("stream")));
-        Ok(bind_provider(
-            io,
-            NAME,
-            move |head, input| post(head, input, stream),
-            |head, _| read_response(head),
-        ))
+        bind_images(io, Spec)
     }
+}
+
+/// A provider's call of OpenAI Images in `dialect`.
+fn bind_images<D: ImagesDialect + Clone>(
+    io: ProviderIo,
+    dialect: D,
+) -> Result<Connection<Output, Input>, Fault> {
+    let stream = streams(&io, &[GENERATIONS, EDITS], |f| is_true(f.get("stream")));
+    Ok(bind_provider(
+        io,
+        NAME,
+        move |head, input| post(head, input, stream, &dialect),
+        |head, _| read_response(head),
+    ))
+}
+
+/// How a vendor departs from OpenAI Images as it serves it: where it takes
+/// a generation and an edit, and the fields of a call as it takes them.
+/// What it does not say is the spec's. A vendor lists its dialect as
+/// `(&DialectedImages::new(XaiImages), Some(BASE_URL))`, a format named
+/// `openai-images`, so a client of the spec is still relayed to it.
+pub trait ImagesDialect: Send + Sync + 'static {
+    /// The path of a generation, beside the base URL.
+    fn generations(&self) -> &'static str {
+        GENERATIONS
+    }
+
+    /// How it takes an edit.
+    fn edits(&self) -> Edits {
+        Edits::Spec
+    }
+
+    /// The fields of a JSON call, or a form's text fields, as the vendor
+    /// takes them, from those the spec wrote of `input`: a size as an
+    /// aspect ratio, say. A field it cannot take is refused here, 400,
+    /// rather than dropped.
+    fn fields(&self, fields: &mut Map<String, Value>, input: &Input) -> Result<(), Fault> {
+        let _ = (fields, input);
+        Ok(())
+    }
+}
+
+/// How a vendor takes an edit.
+#[derive(Debug, Clone, Copy)]
+pub enum Edits {
+    /// The spec's: `/images/edits`, a form of the images' bytes, or JSON
+    /// naming them by URL if one is a URL.
+    Spec,
+    /// JSON to `path`, its images' URLs (a data URL for bytes) and the
+    /// mask's written into the fields by `write`.
+    Json {
+        /// The path, beside the base URL.
+        path: &'static str,
+        /// Writes the images' URLs and the mask's into the fields.
+        write: WriteEdit,
+    },
+}
+
+/// Writes an edit's images' URLs, and its mask's if any, into a call's
+/// fields ([`Edits::Json`]).
+pub type WriteEdit = fn(&mut Map<String, Value>, Vec<String>, Option<String>) -> Result<(), Fault>;
+
+/// The spec itself, as OpenAI serves it.
+#[derive(Debug, Clone, Copy)]
+struct Spec;
+
+impl ImagesDialect for Spec {}
+
+/// OpenAI Images as a vendor serves it, in its dialect `D`: a provider
+/// format named `openai-images`.
+#[derive(Debug, Clone, Copy)]
+pub struct DialectedImages<D>(D);
+
+impl<D> DialectedImages<D> {
+    /// OpenAI Images in `dialect`.
+    pub const fn new(dialect: D) -> Self {
+        Self(dialect)
+    }
+}
+
+impl<D: ImagesDialect + Clone> Upstream for DialectedImages<D> {
+    fn name(&self) -> &str {
+        NAME
+    }
+
+    fn provider(&self, name: String, connect: Connect) -> Provider {
+        Provider::new(name, self.clone(), move |x| connect(x))
+    }
+}
+
+impl<D: ImagesDialect + Clone> Format<ProviderIo, Output, Input> for DialectedImages<D> {
+    fn name(&self) -> &str {
+        NAME
+    }
+
+    fn bind(&self, io: ProviderIo) -> Result<Connection<Output, Input>, Fault> {
+        bind_images(io, self.0.clone())
+    }
+}
+
+/// `size`, `WxH` in pixels as OpenAI names one, as the one of `ratios`
+/// (`W:H`) nearest its own and its longer side: how a vendor that takes an
+/// aspect ratio and a resolution takes it. `None` for no size or `auto`;
+/// a size that is no `WxH`, or whose ratio is none of `ratios` within 5%,
+/// is refused, 400, as the vendor could not draw it.
+pub fn aspect_ratio(
+    size: Option<&str>,
+    ratios: &[&'static str],
+) -> Result<Option<(&'static str, u32)>, Fault> {
+    let Some(size) = size
+        .map(str::trim)
+        .filter(|s| !s.eq_ignore_ascii_case("auto"))
+    else {
+        return Ok(None);
+    };
+    let wrong = || invalid("size", "must be WIDTHxHEIGHT in pixels, or auto");
+    let (w, h) = size.split_once(['x', 'X', '*', '×']).ok_or_else(wrong)?;
+    let (w, h): (u32, u32) = (
+        w.trim().parse().map_err(|_| wrong())?,
+        h.trim().parse().map_err(|_| wrong())?,
+    );
+    if w == 0 || h == 0 {
+        return Err(wrong());
+    }
+    let of = |r: &str| {
+        let (a, b) = r.split_once(':')?;
+        Some(a.parse::<f64>().ok()? / b.parse::<f64>().ok()?)
+    };
+    let want = f64::from(w) / f64::from(h);
+    let nearest = ratios
+        .iter()
+        .filter_map(|r| Some((*r, (of(r)? / want - 1.0).abs())))
+        .min_by(|a, b| a.1.total_cmp(&b.1))
+        .filter(|(_, off)| *off <= 0.05)
+        .ok_or_else(|| {
+            let ratios = ratios.join(", ");
+            invalid(
+                "size",
+                &format!("has an aspect ratio this provider cannot draw; it draws {ratios}"),
+            )
+        })?;
+    Ok(Some((nearest.0, w.max(h))))
 }
 
 /// A client's request, an edit if to `/images/edits`.
@@ -169,22 +305,37 @@ fn post(
     head: &mut RequestHead,
     input: &Input,
     stream: bool,
+    dialect: &dyn ImagesDialect,
 ) -> Result<Box<dyn Encoder<Input>>, Fault> {
+    let fields = || -> Result<Map<String, Value>, Fault> {
+        let mut v = fields(input, stream)?;
+        dialect.fields(&mut v, input)?;
+        Ok(v)
+    };
     if !input.is_edit() {
         if input.mask.is_some() {
             return Err(Fault::bad_request("a mask needs an image to edit"));
         }
-        post_to(head, GENERATIONS, "application/json")?;
-        return Ok(sends(json_bytes(&fields(input, stream)?)?));
+        post_to(head, dialect.generations(), "application/json")?;
+        return Ok(sends(json_bytes(&fields()?)?));
+    }
+    if let Edits::Json { path, write } = dialect.edits() {
+        let mut v = fields()?;
+        let images = input.images.iter().map(url_of).collect();
+        write(&mut v, images, input.mask.as_ref().map(url_of))?;
+        post_to(head, path, "application/json")?;
+        return Ok(sends(json_bytes(&v)?));
     }
     let mut files = input.images.iter().chain(&input.mask);
     if !files.all(|media| bytes_of(media).is_some()) {
         post_to(head, EDITS, "application/json")?;
-        return Ok(sends(json_bytes(&linked_edit(input, stream)?)?));
+        let mut v = linked_edit(input, stream)?;
+        dialect.fields(&mut v, input)?;
+        return Ok(sends(json_bytes(&v)?));
     }
     let mut form = Writer::with_boundary(multipart::random_boundary());
     post_to(head, EDITS, &form.content_type())?;
-    for (name, value) in &fields(input, stream)? {
+    for (name, value) in &fields()? {
         write_field(&mut form, name, value);
     }
     let name = match input.images.len() {
@@ -217,15 +368,27 @@ fn fields(input: &Input, stream: bool) -> Result<Map<String, Value>, Fault> {
     Ok(v)
 }
 
+/// The one of `tiers`, each a resolution's name and its longer side in
+/// pixels, nearest `long`, a size's longer side: how a vendor that names
+/// its resolutions (`1k`, `2K`) takes a size.
+pub fn resolution(long: u32, tiers: &[(&'static str, u32)]) -> Option<&'static str> {
+    tiers
+        .iter()
+        .min_by_key(|(_, px)| px.abs_diff(long))
+        .map(|(name, _)| *name)
+}
+
+/// The URL of `media`: its own, or a data URL of its bytes.
+fn url_of(media: &Media) -> String {
+    match &media.source {
+        MediaSource::Url(url) => url.clone(),
+        MediaSource::Bytes(bytes) => to_data_url(media, bytes),
+    }
+}
+
 /// A JSON edit, its images named by URL.
 fn linked_edit(input: &Input, stream: bool) -> Result<Map<String, Value>, Fault> {
-    let link = |media: &Media| {
-        let url = match &media.source {
-            MediaSource::Url(url) => url.clone(),
-            MediaSource::Bytes(bytes) => to_data_url(media, bytes),
-        };
-        json!({ "image_url": url })
-    };
+    let link = |media: &Media| json!({ "image_url": url_of(media) });
     let mut v = fields(input, stream)?;
     v.insert(
         "images".into(),
@@ -566,7 +729,7 @@ mod tests {
         assert_eq!(input.images[1].mime_type, "image/webp");
         assert_eq!(input.native, None);
         let mut head = http::Request::new(()).into_parts().0;
-        let encoder = post(&mut head, &input, false).expect("a call");
+        let encoder = post(&mut head, &input, false, &Spec).expect("a call");
         assert_eq!(head.uri.path(), EDITS);
         assert_eq!(head.headers[http::header::CONTENT_TYPE], "application/json");
         let written = {
@@ -623,6 +786,56 @@ mod tests {
             ("image_generation.completed", 3),
         ];
         assert_eq!(seen, want.map(|(k, n)| (k.to_owned(), n)));
+    }
+
+    #[test]
+    fn a_dialect_takes_an_edit_of_bytes_as_json_at_its_path() {
+        #[derive(Clone)]
+        struct Refs;
+        impl ImagesDialect for Refs {
+            fn generations(&self) -> &'static str {
+                "/images"
+            }
+            fn edits(&self) -> Edits {
+                Edits::Json {
+                    path: "/images",
+                    write: |v, images, _| {
+                        v.insert("input_references".into(), images.into());
+                        Ok(())
+                    },
+                }
+            }
+            fn fields(&self, v: &mut Map<String, Value>, _: &Input) -> Result<(), Fault> {
+                v.remove("size");
+                Ok(())
+            }
+        }
+        let mut input = Input::new("p");
+        input.size = Some("1024x1024".into());
+        let png = MediaSource::Bytes(Bytes::from_static(b"\x89PN"));
+        input.images.push(Media::new("image/png", png));
+        let mut head = http::Request::new(()).into_parts().0;
+        let mut encoder = post(&mut head, &input, false, &Refs).expect("a call");
+        assert_eq!(head.uri.path(), "/images");
+        let written = encoder.encode_all(&[input]).expect("a body");
+        let written: Value = serde_json::from_slice(&written).unwrap_or_default();
+        assert_eq!(
+            written,
+            json!({"prompt": "p", "input_references": ["data:image/png;base64,iVBO"]})
+        );
+    }
+
+    #[test]
+    fn an_aspect_ratio_is_the_nearest_a_vendor_draws() {
+        let ratios = &["1:1", "16:9", "9:16"];
+        assert_eq!(
+            aspect_ratio(Some("1920x1080"), ratios).ok(),
+            Some(Some(("16:9", 1920)))
+        );
+        assert_eq!(aspect_ratio(Some("auto"), ratios).ok(), Some(None));
+        assert!(aspect_ratio(Some("1500x1000"), ratios).is_err());
+        assert!(aspect_ratio(Some("big"), ratios).is_err());
+        assert_eq!(resolution(1500, &[("1k", 1024), ("2k", 2048)]), Some("1k"));
     }
 
     #[test]

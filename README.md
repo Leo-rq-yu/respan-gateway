@@ -119,12 +119,14 @@ on a public address.
 |---|---|
 | chat | `openai-chat`, `openai-responses`, `anthropic-messages`, `gemini-generate`; `passthrough` for a vendor's other endpoints |
 | realtime | `openai-realtime` ⇄ `gemini-live`; `responses-ws` relayed |
-| image, speech, transcription, embedding | OpenAI's endpoints |
+| image | `openai-images`; to providers also `dashscope-images` (Qwen) and `bedrock-images` (Stability on Bedrock) |
+| speech, transcription, embedding | OpenAI's endpoints |
 | video | `openai-videos`, `gemini-veo` |
 
 **Vendors:** OpenAI, Anthropic, Gemini, Respan, TypeSafe, Groq, DeepSeek,
-OpenRouter, xAI, Mistral, Together, Fireworks, Ollama, Azure, vLLM and
-Cloudflare, plus any compatible endpoint; see [Vendors](docs/vendors.md)
+OpenRouter, xAI, Mistral, Together, Fireworks, Ollama, Azure, vLLM,
+Cloudflare, Qwen, DeepInfra, EmpirioLabs, Bedrock, MiniMax, Novita, Z.ai and
+Meta, plus any compatible endpoint; see [Vendors](docs/vendors.md)
 for their tiers, keys and formats. Translation details are in each
 format's README, for [chat](crates/formats/conversation-http/README.md),
 [media](crates/formats/media-http/README.md) and

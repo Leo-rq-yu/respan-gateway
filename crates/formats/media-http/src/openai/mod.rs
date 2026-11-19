@@ -26,7 +26,7 @@ mod transcriptions;
 mod videos;
 
 pub use embeddings::OpenAiEmbeddings;
-pub use images::OpenAiImages;
+pub use images::{DialectedImages, Edits, ImagesDialect, OpenAiImages, aspect_ratio, resolution};
 pub use respan_gateway_conversation_http::StreamResponse;
 pub use speech::OpenAiSpeech;
 pub use transcriptions::OpenAiTranscriptions;
@@ -198,7 +198,7 @@ fn file_name(media: &Media, stem: &str) -> String {
 }
 
 /// The bytes of `media`, or `None` for a URL.
-fn bytes_of(media: &Media) -> Option<&Bytes> {
+pub(crate) fn bytes_of(media: &Media) -> Option<&Bytes> {
     match &media.source {
         MediaSource::Bytes(bytes) => Some(bytes),
         MediaSource::Url(_) => None,
@@ -206,12 +206,12 @@ fn bytes_of(media: &Media) -> Option<&Bytes> {
 }
 
 /// A 400 for a request whose field `param` `what`, as OpenAI words one.
-fn invalid(param: &str, what: &str) -> Fault {
+pub(crate) fn invalid(param: &str, what: &str) -> Fault {
     fields::invalid(param, what).with(ErrorCode("invalid_request_error".into()))
 }
 
 /// A 400 for a request without the field `param`.
-fn missing(param: &str) -> Fault {
+pub(crate) fn missing(param: &str) -> Fault {
     invalid(param, "is required")
 }
 
@@ -319,17 +319,17 @@ fn foreign(format: &str, native: &NativeValue) -> Fault {
 }
 
 /// Bytes as base64.
-fn b64(bytes: &[u8]) -> String {
+pub(crate) fn b64(bytes: &[u8]) -> String {
     STANDARD.encode(bytes)
 }
 
 /// Base64 `text` as bytes.
-fn unb64(text: &str) -> Option<Bytes> {
+pub(crate) fn unb64(text: &str) -> Option<Bytes> {
     STANDARD.decode(text.trim()).ok().map(Bytes::from)
 }
 
 /// `v` as JSON bytes.
-fn json_bytes(v: &Map<String, Value>) -> Result<Bytes, Fault> {
+pub(crate) fn json_bytes(v: &Map<String, Value>) -> Result<Bytes, Fault> {
     serde_json::to_vec(v)
         .map(Bytes::from)
         .map_err(|e| Fault::internal("a body could not be written").with_source(e))
@@ -362,7 +362,7 @@ fn event_json(_format: &str, raw: &[u8]) -> Result<Option<Value>, Fault> {
 
 /// Whether a provider's JSON says an error: an `error` type, or an `error`
 /// that says something.
-fn says_error(v: &Value) -> bool {
+pub(crate) fn says_error(v: &Value) -> bool {
     v["type"] == "error"
         || match &v["error"] {
             Value::Object(o) => !o.is_empty(),
@@ -373,7 +373,7 @@ fn says_error(v: &Value) -> bool {
 
 /// The fault of an error a provider said in a success: read
 /// as its error answers are, a 502 unless it says another status.
-fn said_error(raw: Bytes) -> Fault {
+pub(crate) fn said_error(raw: Bytes) -> Fault {
     let mut answer = http::Response::new(raw);
     let json = HeaderValue::from_static("application/json");
     answer.headers_mut().insert(CONTENT_TYPE, json);
